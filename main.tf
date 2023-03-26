@@ -10,6 +10,16 @@ provider "aws" {
   }
 }
 
+provider "helm" {
+  kubernetes {
+    host                   = yamldecode(module.talos_bootstrap.kubeconfig)["clusters"][0]["cluster"]["server"]
+    cluster_ca_certificate = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["clusters"][0]["cluster"]["certificate-authority-data"])
+
+    client_certificate = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["users"][0]["user"]["client-certificate-data"])
+    client_key         = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["users"][0]["user"]["client-key-data"])
+  } 
+}
+
 module "talos_config" {
   source             = "./talos/config"
   project_name       = var.project_name
@@ -49,4 +59,33 @@ module "talos_bootstrap" {
   source           = "./talos/bootstrap"
   talos_config     = module.talos_config.talosconfig
   control_plane_ip = data.aws_instances.control_plane_instances.public_ips[0]
+}
+
+
+resource "time_sleep" "wait_2_minutes" {
+  depends_on = [module.talos_bootstrap]
+
+  create_duration = "120s"
+}
+
+resource "helm_release" "cilium" {
+  depends_on = [
+    time_sleep.wait_2_minutes
+  ]
+
+  name       = "cilium"
+  repository = "https://helm.cilium.io"
+  namespace  = "kube-system"
+  chart      = "cilium"
+  version    = "1.13.1"
+
+  set {
+    name  = "ipam.mode"
+    value = "kubernetes"
+  }
+
+  set {
+    name = "securityContext.privileged"
+    value = "true"
+  }
 }

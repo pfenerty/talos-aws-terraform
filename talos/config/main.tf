@@ -1,3 +1,19 @@
+locals {
+  common_machine_config_patch = {
+    cluster = {
+      allowSchedulingOnControlPlanes = true
+      network = {
+        cni = {
+          name = "none"
+        }
+      }
+      apiServer = {
+        disablePodSecurityPolicy = true
+      }
+    }
+  }
+}
+
 resource "talos_machine_secrets" "machine_secrets" {
   talos_version = var.talos_version
 }
@@ -20,6 +36,14 @@ resource "talos_machine_configuration_controlplane" "machineconfig_cp" {
   kubernetes_version = var.kubernetes_version
   docs_enabled       = false
   examples_enabled   = false
+  config_patches = [
+    yamlencode(local.common_machine_config_patch)
+  ]
+}
+
+resource "local_file" "machineconfig_cp" {
+  content  = talos_machine_configuration_controlplane.machineconfig_cp.machine_config
+  filename = "control-plane.yaml"
 }
 
 resource "talos_machine_configuration_worker" "machineconfig_worker" {
@@ -29,4 +53,12 @@ resource "talos_machine_configuration_worker" "machineconfig_worker" {
   kubernetes_version = var.kubernetes_version
   docs_enabled       = false
   examples_enabled   = false
+  config_patches = [
+    yamlencode(local.common_machine_config_patch)
+  ]
+}
+
+resource "local_file" "machineconfig_worker" {
+  content  = talos_machine_configuration_worker.machineconfig_worker.machine_config
+  filename = "worker.yaml"
 }
