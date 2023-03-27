@@ -36,3 +36,5 @@ terraform.rc
 # Generated config files
 kubeconfig
 talosconfig
+worker.yaml
+control-plane.yaml

@@ -14,3 +14,7 @@ resource "local_file" "kubeconfig" {
   content  = talos_cluster_kubeconfig.kubeconfig.kube_config
   filename = "kubeconfig"
 }
+
+output "kubeconfig" {
+  value = talos_cluster_kubeconfig.kubeconfig.kube_config
+}

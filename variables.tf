@@ -72,3 +72,27 @@ variable "kubernetes_version" {
   default     = "1.26.1"
   description = "Kubernetes version"
 }
+
+variable "enable_cilium" {
+  type    = bool
+  default = true
+  description = "Use Cilium as the CNI, replaces Talos default flannel"
+}
+
+variable "cilium_version" {
+  type    = string
+  default = "1.13.1"
+  description = "Version of Cilium to deploy"
+}
+
+variable "enable_cilium_hubble" {
+  type    = bool
+  default = true
+  description = "Enable Cilium Hubble"
+}
+
+variable "cilium_replace_kube_proxy" {
+  type    = bool
+  default = true
+  description = "Use Cilium to replace Kube Proxy"
+}

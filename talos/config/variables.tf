@@ -13,3 +13,13 @@ variable "talos_version" {
 variable "kubernetes_version" {
   type = string
 }
+
+variable "cni" {
+  type    = string
+  default = "flannel"
+}
+
+variable "disable_kube_proxy" {
+  type    = bool
+  default = false
+}
