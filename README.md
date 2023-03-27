@@ -12,6 +12,8 @@ Terraform will:
 
 3. Bootstrap the cluster
 
+4. Installs sepcified apps (Cilium)
+
 When Terraform has completed, there will be a `kubeconfig` and `talosconfig` file in your working directory; after about a minute after completion you should have a functional cluster
 
 See `variables.tf` for available variables and descriptions

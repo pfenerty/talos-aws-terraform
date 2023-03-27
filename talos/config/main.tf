@@ -4,8 +4,11 @@ locals {
       allowSchedulingOnControlPlanes = true
       network = {
         cni = {
-          name = "none"
+          name = var.cni == "flannel" ? "flannel" : "none"
         }
+      }
+      proxy = {
+        disabled = var.disable_kube_proxy
       }
       apiServer = {
         disablePodSecurityPolicy = true
