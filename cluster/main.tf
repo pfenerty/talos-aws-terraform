@@ -1,21 +1,30 @@
-resource "aws_subnet" "subnet" {
-  vpc_id            = var.vpc_id
-  cidr_block        = var.subnet_cidr
-  availability_zone = var.availability_zone
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "~> 3.0"
+
+  name = var.project_name
+  cidr = var.vpc_cidr
+
+  azs            = data.aws_availability_zones.available.names
+  public_subnets = [for i, v in data.aws_availability_zones.available.names : cidrsubnet(var.vpc_cidr, 5, i)]
 }
 
 module "security" {
   source       = "./security"
   project_name = var.project_name
-  vpc_id       = var.vpc_id
+  vpc_id       = module.vpc.vpc_id
   admin_cidr   = var.admin_cidr
 }
 
 module "load_balancer" {
   source       = "./load_balancer"
   project_name = var.project_name
-  vpc_id       = var.vpc_id
-  subnets      = [aws_subnet.subnet.id]
+  vpc_id       = module.vpc.vpc_id
+  subnets      = module.vpc.public_subnets
 }
 
 module "control_plane" {
@@ -24,8 +33,9 @@ module "control_plane" {
   project_name    = var.project_name
   talos_version   = var.talos_version
   user_data       = var.control_plane_config
+  region          = var.region
   security_groups = [module.security.all_sgid, module.security.control_plane_sgid]
-  subnets         = [aws_subnet.subnet.id]
+  subnets         = module.vpc.public_subnets
   min_nodes       = var.control_plane_nodes
   max_nodes       = var.control_plane_nodes
   instance_type   = var.control_plane_instance_type
@@ -38,8 +48,9 @@ module "workers" {
   project_name    = var.project_name
   talos_version   = var.talos_version
   user_data       = var.worker_config
+  region          = var.region
   security_groups = [module.security.all_sgid]
-  subnets         = [aws_subnet.subnet.id]
+  subnets         = module.vpc.public_subnets
   min_nodes       = var.min_worker_nodes
   max_nodes       = var.max_worker_nodes
   instance_type   = var.worker_instance_type

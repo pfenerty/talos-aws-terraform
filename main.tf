@@ -1,15 +1,3 @@
-provider "aws" {
-  region                   = var.region
-  shared_config_files      = ["~/.aws/config"]
-  shared_credentials_files = ["~/.aws/credentials"]
-  profile                  = "default"
-  default_tags {
-    tags = {
-      project_name = var.project_name
-    }
-  }
-}
-
 module "talos_config" {
   source             = "./talos/config"
   project_name       = var.project_name
@@ -27,9 +15,8 @@ module "cluster" {
   talos_version               = var.talos_version
   control_plane_config        = module.talos_config.machineconfig_controlplane
   worker_config               = module.talos_config.machineconfig_worker
-  vpc_id                      = var.vpc_id
+  region                      = var.region
   subnet_cidr                 = var.subnet_cidr
-  availability_zone           = var.availability_zone
   admin_cidr                  = var.admin_cidr
   control_plane_nodes         = var.control_plane_nodes
   control_plane_instance_type = var.control_plane_node_instance_type

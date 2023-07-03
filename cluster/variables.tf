@@ -2,6 +2,16 @@ variable "project_name" {
   type = string
 }
 
+variable "region" {
+  type = string
+}
+
+variable "vpc_cidr" {
+  description = "The IPv4 CIDR block for the VPC."
+  type        = string
+  default     = "172.31.0.0/16"
+}
+
 variable "talos_version" {
   type = string
 }
@@ -14,15 +24,7 @@ variable "worker_config" {
   type = string
 }
 
-variable "vpc_id" {
-  type = string
-}
-
 variable "subnet_cidr" {
-  type = string
-}
-
-variable "availability_zone" {
   type = string
 }
 

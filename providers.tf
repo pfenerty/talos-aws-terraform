@@ -15,6 +15,18 @@ terraform {
   }
 }
 
+provider "aws" {
+  region                   = var.region
+  shared_config_files      = ["~/.aws/config"]
+  shared_credentials_files = ["~/.aws/credentials"]
+  profile                  = "default"
+  default_tags {
+    tags = {
+      project_name = var.project_name
+    }
+  }
+}
+
 provider "helm" {
   kubernetes {
     host                   = yamldecode(module.talos_bootstrap.kubeconfig)["clusters"][0]["cluster"]["server"]

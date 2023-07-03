@@ -4,19 +4,9 @@ variable "region" {
   description = "AWS region to create infastructure in"
 }
 
-variable "vpc_id" {
-  type        = string
-  description = "VPC to create infastucture in"
-}
-
 variable "subnet_cidr" {
   type        = string
   description = "CIDR block for the subnet to be created"
-}
-
-variable "availability_zone" {
-  type        = string
-  description = "Availability Zone for the subnet to be created"
 }
 
 variable "admin_cidr" {
@@ -74,25 +64,25 @@ variable "kubernetes_version" {
 }
 
 variable "enable_cilium" {
-  type    = bool
-  default = true
+  type        = bool
+  default     = true
   description = "Use Cilium as the CNI, replaces Talos default flannel"
 }
 
 variable "cilium_version" {
-  type    = string
-  default = "1.13.1"
+  type        = string
+  default     = "1.13.1"
   description = "Version of Cilium to deploy"
 }
 
 variable "enable_cilium_hubble" {
-  type    = bool
-  default = true
+  type        = bool
+  default     = true
   description = "Enable Cilium Hubble"
 }
 
 variable "cilium_replace_kube_proxy" {
-  type    = bool
-  default = true
+  type        = bool
+  default     = true
   description = "Use Cilium to replace Kube Proxy"
 }
