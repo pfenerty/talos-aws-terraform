@@ -17,47 +17,37 @@ module "cluster" {
   worker_config               = module.talos_config.machineconfig_worker
   region                      = var.region
   subnet_cidr                 = var.subnet_cidr
-  admin_cidr                  = var.admin_cidr
+  kubernetes_api_allowed_cidr = var.kubernetes_api_allowed_cidr
+  talos_api_allowed_cidr      = var.talos_api_allowed_cidr
   control_plane_nodes         = var.control_plane_nodes
   control_plane_instance_type = var.control_plane_node_instance_type
-  min_worker_nodes            = var.min_worker_nodes
-  max_worker_nodes            = var.max_worker_nodes
-  worker_instance_type        = var.control_plane_node_instance_type
-}
-
-data "aws_instances" "control_plane_instances" {
-  depends_on = [
-    module.cluster
-  ]
-  filter {
-    name   = "tag:aws:autoscaling:groupName"
-    values = [module.cluster.control_plane_asg_name]
-  }
+  worker_nodes                = var.worker_nodes
+  worker_instance_type        = var.worker_node_instance_type
 }
 
 module "talos_bootstrap" {
   source           = "./talos/bootstrap"
   talos_config     = module.talos_config.talosconfig
-  control_plane_ip = data.aws_instances.control_plane_instances.public_ips[0]
+  control_plane_ip = module.cluster.control_plane_public_ips[0]
 }
 
 
-resource "time_sleep" "wait_for_cluster_ready" {
-  depends_on      = [module.talos_bootstrap]
-  create_duration = "120s"
-}
+# resource "time_sleep" "wait_for_cluster_ready" {
+#   depends_on      = [module.talos_bootstrap]
+#   create_duration = "120s"
+# }
 
-module "post_install" {
-  source = "./post-install"
+# module "post_install" {
+#   source = "./post-install"
 
-  depends_on = [
-    time_sleep.wait_for_cluster_ready
-  ]
+#   depends_on = [
+#     time_sleep.wait_for_cluster_ready
+#   ]
 
-  cilium                   = var.enable_cilium
-  cilium_version           = var.cilium_version
-  cilium_k8s_service_host  = module.cluster.load_balancer_dns
-  cilium_k8s_service_port  = 443
-  cilium_enable_hubble     = var.enable_cilium_hubble
-  cilium_proxy_replacement = var.cilium_replace_kube_proxy
-}
+#   cilium                   = var.enable_cilium
+#   cilium_version           = var.cilium_version
+#   cilium_k8s_service_host  = module.cluster.load_balancer_dns
+#   cilium_k8s_service_port  = 443
+#   cilium_enable_hubble     = var.enable_cilium_hubble
+#   cilium_proxy_replacement = var.cilium_replace_kube_proxy
+# }

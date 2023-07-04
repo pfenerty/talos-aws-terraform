@@ -9,10 +9,16 @@ variable "subnet_cidr" {
   description = "CIDR block for the subnet to be created"
 }
 
-variable "admin_cidr" {
+variable "talos_api_allowed_cidr" {
+  description = "The CIDR from which to allow to access the Talos API"
   type        = string
   default     = "0.0.0.0/0"
-  description = "CIDR block to make admin ports (6443,50000,50001) available from"
+}
+
+variable "kubernetes_api_allowed_cidr" {
+  description = "The CIDR from which to allow to access the Kubernetes API"
+  type        = string
+  default     = "0.0.0.0/0"
 }
 
 variable "project_name" {
@@ -33,16 +39,10 @@ variable "control_plane_node_instance_type" {
   description = "AWS EC2 instance type for control plane nodes"
 }
 
-variable "min_worker_nodes" {
+variable "worker_nodes" {
   type        = number
   default     = 0
   description = "Minimum number of worker nodes for the autoscaling group"
-}
-
-variable "max_worker_nodes" {
-  type        = number
-  default     = 0
-  description = "Maximum number of worker nodes for the autoscaling group"
 }
 
 variable "worker_node_instance_type" {

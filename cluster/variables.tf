@@ -28,8 +28,14 @@ variable "subnet_cidr" {
   type = string
 }
 
-variable "admin_cidr" {
-  type = string
+variable "talos_api_allowed_cidr" {
+  description = "The CIDR from which to allow to access the Talos API"
+  type        = string
+}
+
+variable "kubernetes_api_allowed_cidr" {
+  description = "The CIDR from which to allow to access the Kubernetes API"
+  type        = string
 }
 
 variable "control_plane_instance_type" {
@@ -45,12 +51,7 @@ variable "control_plane_nodes" {
   default = 1
 }
 
-variable "min_worker_nodes" {
-  type    = number
-  default = 1
-}
-
-variable "max_worker_nodes" {
+variable "worker_nodes" {
   type    = number
   default = 1
 }
