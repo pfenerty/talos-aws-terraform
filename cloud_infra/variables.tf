@@ -16,14 +16,6 @@ variable "talos_version" {
   type = string
 }
 
-variable "control_plane_config" {
-  type = string
-}
-
-variable "worker_config" {
-  type = string
-}
-
 variable "subnet_cidr" {
   type = string
 }

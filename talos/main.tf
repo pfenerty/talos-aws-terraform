@@ -49,6 +49,15 @@ resource "local_file" "machineconfig_cp" {
   filename = "control-plane.yaml"
 }
 
+resource "talos_machine_configuration_apply" "apply_control_plane_configs" {
+  talos_config          = talos_client_configuration.talosconfig.talos_config
+  machine_configuration = talos_machine_configuration_controlplane.machineconfig_cp.machine_config
+
+  count    = length(var.control_plane_nodes)
+  endpoint = var.control_plane_nodes[count.index].public_ip
+  node     = var.control_plane_nodes[count.index].private_ip
+}
+
 resource "talos_machine_configuration_worker" "machineconfig_worker" {
   cluster_name       = talos_client_configuration.talosconfig.cluster_name
   cluster_endpoint   = var.endpoint
@@ -64,4 +73,30 @@ resource "talos_machine_configuration_worker" "machineconfig_worker" {
 resource "local_file" "machineconfig_worker" {
   content  = talos_machine_configuration_worker.machineconfig_worker.machine_config
   filename = "worker.yaml"
+}
+
+resource "talos_machine_configuration_apply" "apply_worker_configs" {
+  talos_config          = talos_client_configuration.talosconfig.talos_config
+  machine_configuration = talos_machine_configuration_worker.machineconfig_worker.machine_config
+
+  count    = length(var.worker_nodes)
+  endpoint = var.worker_nodes[count.index].public_ip
+  node     = var.worker_nodes[count.index].private_ip
+}
+
+resource "talos_machine_bootstrap" "talos_bootstrap" {
+  talos_config = talos_client_configuration.talosconfig.talos_config
+  endpoint     = var.control_plane_nodes[0].public_ip
+  node         = var.control_plane_nodes[0].private_ip
+}
+
+resource "talos_cluster_kubeconfig" "kubeconfig" {
+  talos_config = talos_client_configuration.talosconfig.talos_config
+  endpoint     = var.control_plane_nodes[0].public_ip
+  node         = var.control_plane_nodes[0].private_ip
+}
+
+resource "local_file" "kubeconfig" {
+  content  = talos_cluster_kubeconfig.kubeconfig.kube_config
+  filename = "kubeconfig"
 }

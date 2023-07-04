@@ -104,7 +104,6 @@ module "control_plane_nodes" {
   subnet_id     = element(module.vpc.public_subnets, count.index)
 
   vpc_security_group_ids = [module.cluster_sg.security_group_id]
-  user_data = var.control_plane_config
 
   root_block_device = [
     {
@@ -126,7 +125,6 @@ module "worker_nodes" {
   subnet_id     = element(module.vpc.public_subnets, count.index)
 
   vpc_security_group_ids = [module.cluster_sg.security_group_id]
-  user_data = var.worker_config
 
   root_block_device = [
     {
