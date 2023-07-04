@@ -28,8 +28,13 @@ variable "worker_nodes" {
   }))
 }
 
-variable "topology_labels" {
-  type = string
+variable "aws_topology" {
+  type = object({
+    region = string
+    az = string
+    cp_instance_type = string
+    wk_instance_type = string
+  })
 }
 
 variable "cni" {

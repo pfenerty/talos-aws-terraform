@@ -13,8 +13,8 @@ module "vpc" {
   name = var.project_name
   cidr = var.vpc_cidr
 
-  azs            = data.aws_availability_zones.available.names
-  public_subnets = [for i, v in data.aws_availability_zones.available.names : cidrsubnet(var.vpc_cidr, 5, i)]
+  azs            = [data.aws_availability_zones.available.names[0]]
+  public_subnets = [for i, v in [data.aws_availability_zones.available.names[0]] : cidrsubnet(var.vpc_cidr, 5, i)]
 }
 
 module "cluster_sg" {

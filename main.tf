@@ -21,18 +21,15 @@ module "talos" {
   kubernetes_version  = var.kubernetes_version
   talos_version       = var.talos_version
 
+  aws_topology = {
+    region = var.region
+    az = module.cluster.availability_zone
+    cp_instance_type = var.control_plane_node_instance_type
+    wk_instance_type = var.worker_node_instance_type
+  }
+
   cni                = var.enable_cilium ? "cilium" : "flannel"
   disable_kube_proxy = var.cilium_replace_kube_proxy
-
-  topology_labels = yamlencode({
-    "machine" : {
-      "nodeLabels" : {
-        "node.kubernetes.io/instance-type" : var.worker_node_instance_type,
-        "topology.kubernetes.io/zone" : var.availability_zone,
-        "topology.kubernetes.io/region" : var.region
-      }
-    }
-  })
 }
 
 resource "time_sleep" "wait_for_cluster_ready" {

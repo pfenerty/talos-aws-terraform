@@ -40,7 +40,16 @@ resource "talos_machine_configuration_controlplane" "machineconfig_cp" {
   docs_enabled       = false
   examples_enabled   = false
   config_patches = [
-    yamlencode(local.common_machine_config_patch)
+    yamlencode(local.common_machine_config_patch),
+    yamlencode({
+      "machine" : {
+        "nodeLabels" : {
+          "node.kubernetes.io/instance-type" : var.aws_topology.cp_instance_type,
+          "topology.kubernetes.io/zone" : var.aws_topology.az,
+          "topology.kubernetes.io/region" : var.aws_topology.region
+        }
+      }
+    })
   ]
 }
 
@@ -66,7 +75,16 @@ resource "talos_machine_configuration_worker" "machineconfig_worker" {
   docs_enabled       = false
   examples_enabled   = false
   config_patches = [
-    yamlencode(local.common_machine_config_patch)
+    yamlencode(local.common_machine_config_patch),
+    yamlencode({
+      "machine" : {
+        "nodeLabels" : {
+          "node.kubernetes.io/instance-type" : var.aws_topology.wk_instance_type,
+          "topology.kubernetes.io/zone" : var.aws_topology.az,
+          "topology.kubernetes.io/region" : var.aws_topology.region
+        }
+      }
+    })
   ]
 }
 
