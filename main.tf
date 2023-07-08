@@ -22,8 +22,8 @@ module "talos" {
   talos_version       = var.talos_version
 
   aws_topology = {
-    region = var.region
-    az = module.cluster.availability_zone
+    region           = var.region
+    az               = module.cluster.availability_zone
     cp_instance_type = var.control_plane_node_instance_type
     wk_instance_type = var.worker_node_instance_type
   }

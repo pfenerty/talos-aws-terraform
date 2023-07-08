@@ -10,9 +10,6 @@ locals {
       proxy = {
         disabled = var.disable_kube_proxy
       }
-      apiServer = {
-        disablePodSecurityPolicy = true
-      }
     }
   }
 }

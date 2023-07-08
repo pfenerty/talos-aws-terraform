@@ -30,8 +30,8 @@ variable "worker_nodes" {
 
 variable "aws_topology" {
   type = object({
-    region = string
-    az = string
+    region           = string
+    az               = string
     cp_instance_type = string
     wk_instance_type = string
   })
