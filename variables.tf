@@ -4,25 +4,21 @@ variable "region" {
   description = "AWS region to create infastructure in"
 }
 
-variable "vpc_id" {
-  type        = string
-  description = "VPC to create infastucture in"
-}
-
 variable "subnet_cidr" {
   type        = string
   description = "CIDR block for the subnet to be created"
 }
 
-variable "availability_zone" {
-  type        = string
-  description = "Availability Zone for the subnet to be created"
-}
-
-variable "admin_cidr" {
+variable "talos_api_allowed_cidr" {
+  description = "The CIDR from which to allow to access the Talos API"
   type        = string
   default     = "0.0.0.0/0"
-  description = "CIDR block to make admin ports (6443,50000,50001) available from"
+}
+
+variable "kubernetes_api_allowed_cidr" {
+  description = "The CIDR from which to allow to access the Kubernetes API"
+  type        = string
+  default     = "0.0.0.0/0"
 }
 
 variable "project_name" {
@@ -43,16 +39,10 @@ variable "control_plane_node_instance_type" {
   description = "AWS EC2 instance type for control plane nodes"
 }
 
-variable "min_worker_nodes" {
+variable "worker_nodes" {
   type        = number
   default     = 0
   description = "Minimum number of worker nodes for the autoscaling group"
-}
-
-variable "max_worker_nodes" {
-  type        = number
-  default     = 0
-  description = "Maximum number of worker nodes for the autoscaling group"
 }
 
 variable "worker_node_instance_type" {
@@ -63,36 +53,36 @@ variable "worker_node_instance_type" {
 
 variable "talos_version" {
   type        = string
-  default     = "v1.3.5"
+  default     = "v1.4.6"
   description = "Talos Linux version"
 }
 
 variable "kubernetes_version" {
   type        = string
-  default     = "1.26.1"
+  default     = "1.27.3"
   description = "Kubernetes version"
 }
 
 variable "enable_cilium" {
-  type    = bool
-  default = true
+  type        = bool
+  default     = true
   description = "Use Cilium as the CNI, replaces Talos default flannel"
 }
 
 variable "cilium_version" {
-  type    = string
-  default = "1.13.1"
+  type        = string
+  default     = "1.13.4"
   description = "Version of Cilium to deploy"
 }
 
 variable "enable_cilium_hubble" {
-  type    = bool
-  default = true
+  type        = bool
+  default     = true
   description = "Enable Cilium Hubble"
 }
 
 variable "cilium_replace_kube_proxy" {
-  type    = bool
-  default = true
+  type        = bool
+  default     = true
   description = "Use Cilium to replace Kube Proxy"
 }
