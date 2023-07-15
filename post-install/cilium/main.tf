@@ -39,4 +39,9 @@ resource "helm_release" "cilium" {
     name  = "hubble.ui.enabled"
     value = var.enable_hubble
   }
+
+  set {
+    name = "socketLB.hostNamespaceOnly"
+    value = "true"
+  }
 }

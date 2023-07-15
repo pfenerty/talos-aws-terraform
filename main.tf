@@ -46,6 +46,12 @@ module "post_install" {
     time_sleep.wait_for_cluster_ready
   ]
 
+  providers = {
+    flux = flux
+  }
+
+  project_name = var.project_name
+
   cilium                   = var.enable_cilium
   cilium_version           = var.cilium_version
   cilium_k8s_service_host  = module.cluster.load_balancer_dns
@@ -53,3 +59,4 @@ module "post_install" {
   cilium_enable_hubble     = var.enable_cilium_hubble
   cilium_proxy_replacement = var.cilium_replace_kube_proxy
 }
+

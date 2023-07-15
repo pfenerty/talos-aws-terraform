@@ -10,6 +10,32 @@ locals {
       proxy = {
         disabled = var.disable_kube_proxy
       }
+      # apiServer = {
+      #   admissionControl = [
+      #     {
+      #       name = "PodSecurity"
+      #       configuration = {
+      #         apiVersion = "pod-security.admission.config.k8s.io/v1alpha1"
+      #         defaults = {
+      #           audit           = "restricted"
+      #           audit-version   = "latest"
+      #           enforce         = "baseline"
+      #           enforce-version = "latest"
+      #           warn            = "restricted"
+      #           warn-version    = "latest"
+      #         }
+      #         exemptions = {
+      #           namespaces = [
+      #             "linkerd"
+      #           ]
+      #           runtimeClasses = []
+      #           usernames      = []
+      #           kind           = "PodSecurityConfiguration"
+      #         }
+      #       }
+      #     }
+      #   ]
+      # }
     }
   }
 }
