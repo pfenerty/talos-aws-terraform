@@ -70,19 +70,11 @@ provider "flux" {
     client_key         = base64decode(yamldecode(module.talos.kubeconfig)["users"][0]["user"]["client-key-data"])
   }
   git = {
-    url    = "ssh://github.com/pfenerty/flux-bootstrap.git"
-    branch = "talos"
+    url    = var.flux_git_url
+    branch = var.flux_git_branch
     ssh = {
       username    = "git"
-      private_key = <<EOT
------BEGIN OPENSSH PRIVATE KEY-----
-b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
-QyNTUxOQAAACBhmDEQqq4ukAa8UFKr3wLgWN7G1I5FUQZx5JSZVl3MaQAAAKCzp5iDs6eY
-gwAAAAtzc2gtZWQyNTUxOQAAACBhmDEQqq4ukAa8UFKr3wLgWN7G1I5FUQZx5JSZVl3MaQ
-AAAED9/oOS50FSjCVtOMmPPPO+IyqJughJeORVbVFvGNJTeGGYMRCqri6QBrxQUqvfAuBY
-3sbUjkVRBnHklJlWXcxpAAAAG3BhdHJpY2tmZW5lcnR5QEdMYURPUy5sb2NhbAEC
------END OPENSSH PRIVATE KEY-----
-EOT
+      private_key = var.flux_ssh_private_key
     }
   }
 }
