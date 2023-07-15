@@ -51,16 +51,6 @@ provider "kubernetes" {
   client_key         = base64decode(yamldecode(module.talos.kubeconfig)["users"][0]["user"]["client-key-data"])
 }
 
-provider "helm" {
-  kubernetes {
-    host                   = yamldecode(module.talos.kubeconfig)["clusters"][0]["cluster"]["server"]
-    cluster_ca_certificate = base64decode(yamldecode(module.talos.kubeconfig)["clusters"][0]["cluster"]["certificate-authority-data"])
-
-    client_certificate = base64decode(yamldecode(module.talos.kubeconfig)["users"][0]["user"]["client-certificate-data"])
-    client_key         = base64decode(yamldecode(module.talos.kubeconfig)["users"][0]["user"]["client-key-data"])
-  }
-}
-
 provider "flux" {
   kubernetes = {
     host                   = yamldecode(module.talos.kubeconfig)["clusters"][0]["cluster"]["server"]
@@ -70,7 +60,7 @@ provider "flux" {
     client_key         = base64decode(yamldecode(module.talos.kubeconfig)["users"][0]["user"]["client-key-data"])
   }
   git = {
-    url    = var.flux_git_url
+    url    = var.enable_flux_post_install ? var.flux_git_url : "ssh://github.com"
     branch = var.flux_git_branch
     ssh = {
       username    = "git"

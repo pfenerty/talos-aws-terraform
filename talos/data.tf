@@ -1,9 +1,9 @@
-resource "helm_release" "cilium" {
+data "helm_template" "cilium" {
   name       = "cilium"
   repository = "https://helm.cilium.io"
   namespace  = "kube-system"
   chart      = "cilium"
-  version    = var.app_version
+  version    = var.cilium_version
 
   set {
     name  = "ipam.mode"
@@ -17,27 +17,27 @@ resource "helm_release" "cilium" {
 
   set {
     name  = "kubeProxyReplacement"
-    value = var.proxy_replacement ? "strict" : "disabled"
+    value = var.cilium_proxy_replacement ? "strict" : "disabled"
   }
 
   set {
     name  = "k8sServiceHost"
-    value = var.k8s_service_host
+    value = var.load_balancer_dns
   }
 
   set {
     name  = "k8sServicePort"
-    value = var.k8s_service_port
+    value = 443
   }
 
   set {
     name  = "hubble.relay.enabled"
-    value = var.enable_hubble
+    value = var.cilium_enable_hubble
   }
 
   set {
     name  = "hubble.ui.enabled"
-    value = var.enable_hubble
+    value = var.cilium_enable_hubble
   }
 
   set {

@@ -87,17 +87,26 @@ variable "cilium_replace_kube_proxy" {
   description = "Use Cilium to replace Kube Proxy"
 }
 
+variable "enable_flux_post_install" {
+  type        = bool
+  default     = true
+  description = "Enable flux bootstrap and post install resources"
+}
+
 variable "flux_git_url" {
   type        = string
   description = "Git URL to initialize flux-system"
+  default = ""
 }
 
 variable "flux_git_branch" {
   type        = string
   description = "Git branch to initialize flux-system"
+  default = ""
 }
 
 variable "flux_ssh_private_key" {
   type        = string
   description = "SSH key to use for Flux git auth"
+  default = ""
 }
