@@ -1,3 +1,22 @@
+resource "null_resource" "prechecks" {
+  lifecycle {
+    precondition {
+      condition = !(var.enable_flux_post_install && var.flux_git_url == "")
+      error_message = "If Flux post install is enabled, you must provide a git url to bootstrap flux"
+    }
+
+    precondition {
+      condition = !(var.enable_flux_post_install && var.flux_git_branch == "")
+      error_message = "If Flux post install is enabled, you must provide a git branch to bootstrap flux"
+    }
+
+    precondition {
+      condition = !(var.enable_flux_post_install && var.flux_ssh_private_key == "")
+      error_message = "If Flux post install is enabled, you must provide a git ssh key to bootstrap flux"
+    }
+  }
+}
+
 module "cluster" {
   source                      = "./cloud_infra"
   project_name                = var.project_name
@@ -15,11 +34,16 @@ module "cluster" {
 module "talos" {
   source              = "./talos"
   project_name        = var.project_name
-  endpoint            = "https://${module.cluster.load_balancer_dns}:443"
+  load_balancer_dns   = module.cluster.load_balancer_dns
   control_plane_nodes = module.cluster.control_plane_nodes
   worker_nodes        = module.cluster.worker_nodes
   kubernetes_version  = var.kubernetes_version
   talos_version       = var.talos_version
+
+  cilium                   = var.enable_cilium
+  cilium_version           = var.cilium_version
+  cilium_enable_hubble     = var.enable_cilium_hubble
+  cilium_proxy_replacement = var.cilium_replace_kube_proxy
 
   aws_topology = {
     region           = var.region
@@ -33,11 +57,18 @@ module "talos" {
 }
 
 resource "time_sleep" "wait_for_cluster_ready" {
-  depends_on      = [module.talos]
-  create_duration = "120s"
+  count = var.enable_flux_post_install ? 1 : 0
+
+  depends_on      = [
+    module.cluster,
+    module.talos
+  ]
+  create_duration = "90s"
 }
 
 module "post_install" {
+  count = var.enable_flux_post_install ? 1 : 0
+
   source = "./post-install"
 
   depends_on = [
@@ -46,10 +77,10 @@ module "post_install" {
     time_sleep.wait_for_cluster_ready
   ]
 
-  cilium                   = var.enable_cilium
-  cilium_version           = var.cilium_version
-  cilium_k8s_service_host  = module.cluster.load_balancer_dns
-  cilium_k8s_service_port  = 443
-  cilium_enable_hubble     = var.enable_cilium_hubble
-  cilium_proxy_replacement = var.cilium_replace_kube_proxy
+  providers = {
+    flux = flux
+  }
+
+  project_name = var.project_name
 }
+

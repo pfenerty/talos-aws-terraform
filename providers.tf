@@ -8,9 +8,25 @@ terraform {
       source  = "siderolabs/talos"
       version = "0.1.2"
     }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "2.21.1"
+    }
     helm = {
       source  = "hashicorp/helm"
       version = "2.9.0"
+    }
+    flux = {
+      source  = "fluxcd/flux"
+      version = "1.0.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "3.5.1"
+    }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "4.0.4"
     }
   }
 }
@@ -27,12 +43,28 @@ provider "aws" {
   }
 }
 
-provider "helm" {
-  kubernetes {
+provider "kubernetes" {
+  host                   = yamldecode(module.talos.kubeconfig)["clusters"][0]["cluster"]["server"]
+  cluster_ca_certificate = base64decode(yamldecode(module.talos.kubeconfig)["clusters"][0]["cluster"]["certificate-authority-data"])
+
+  client_certificate = base64decode(yamldecode(module.talos.kubeconfig)["users"][0]["user"]["client-certificate-data"])
+  client_key         = base64decode(yamldecode(module.talos.kubeconfig)["users"][0]["user"]["client-key-data"])
+}
+
+provider "flux" {
+  kubernetes = {
     host                   = yamldecode(module.talos.kubeconfig)["clusters"][0]["cluster"]["server"]
     cluster_ca_certificate = base64decode(yamldecode(module.talos.kubeconfig)["clusters"][0]["cluster"]["certificate-authority-data"])
 
     client_certificate = base64decode(yamldecode(module.talos.kubeconfig)["users"][0]["user"]["client-certificate-data"])
     client_key         = base64decode(yamldecode(module.talos.kubeconfig)["users"][0]["user"]["client-key-data"])
+  }
+  git = {
+    url    = var.enable_flux_post_install ? var.flux_git_url : "ssh://github.com"
+    branch = var.flux_git_branch
+    ssh = {
+      username    = "git"
+      private_key = var.flux_ssh_private_key
+    }
   }
 }

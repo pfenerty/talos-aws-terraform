@@ -10,7 +10,7 @@ variable "kubernetes_version" {
   type = string
 }
 
-variable "endpoint" {
+variable "load_balancer_dns" {
   type = string
 }
 
@@ -42,5 +42,21 @@ variable "cni" {
 }
 
 variable "disable_kube_proxy" {
+  type = bool
+}
+
+variable "cilium" {
+  type = bool
+}
+
+variable "cilium_version" {
+  type = string
+}
+
+variable "cilium_proxy_replacement" {
+  type = bool
+}
+
+variable "cilium_enable_hubble" {
   type = bool
 }

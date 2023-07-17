@@ -1,0 +1,5 @@
+cluster:
+  inlineManifests:
+    - name: cilium
+      contents: |
+        ${cilium_manifests}

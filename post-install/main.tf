@@ -1,12 +1,16 @@
-module "cilium" {
-  count  = var.cilium ? 1 : 0
-  source = "./cilium"
+resource "random_uuid" "cluster_flux_id" {}
 
-  app_version   = var.cilium_version
-  enable_hubble = var.cilium_enable_hubble
+resource "flux_bootstrap_git" "this" {
+  path = "clusters/${random_uuid.cluster_flux_id.result}"
+}
 
-  k8s_service_host = var.cilium_k8s_service_host
-  k8s_service_port = var.cilium_k8s_service_port
+module "ebs" {
+  source = "./ebs"
+  project_name = var.project_name
+}
 
-  proxy_replacement = var.cilium_proxy_replacement
+module "linkerd" {
+  source = "./linkerd"
+
+  depends_on = [ flux_bootstrap_git.this ]
 }
