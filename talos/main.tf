@@ -1,7 +1,6 @@
 locals {
   common_machine_config_patch = {
     cluster = {
-      # allowSchedulingOnControlPlanes = true
       network = {
         cni = {
           name = var.cni == "flannel" ? "flannel" : "none"
