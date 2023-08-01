@@ -2,10 +2,17 @@ resource "aws_iam_user" "ebs" {
   name = "${var.project_name}_ebs_svc"
 }
 
-resource "aws_iam_user_policy" "ebs" {
+resource "aws_iam_policy" "ebs" {
   name   = "${var.project_name}_ebs"
-  user   = aws_iam_user.ebs.name
-  policy = file("${path.module}/ebs-iam.json")
+  policy = templatefile("${path.module}/ebs-iam.json.tmpl", {
+    account_id = var.aws_account_id,
+    project_name = var.project_name
+  })
+}
+
+resource "aws_iam_user_policy_attachment" "ebs" {
+  user = aws_iam_user.ebs.name
+  policy_arn = aws_iam_policy.ebs.arn
 }
 
 resource "aws_iam_access_key" "ebs" {
