@@ -15,3 +15,11 @@ module "linkerd" {
 
   depends_on = [ flux_bootstrap_git.this ]
 }
+
+module "loki" {
+  source = "./loki"
+  project_name = var.project_name
+  region = var.region
+
+  depends_on = [ flux_bootstrap_git.this ]
+}
