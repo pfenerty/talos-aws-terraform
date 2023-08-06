@@ -4,11 +4,6 @@ variable "region" {
   description = "AWS region to create infastructure in"
 }
 
-variable "subnet_cidr" {
-  type        = string
-  description = "CIDR block for the subnet to be created"
-}
-
 variable "talos_api_allowed_cidr" {
   description = "The CIDR from which to allow to access the Talos API"
   type        = string

@@ -16,10 +16,6 @@ variable "talos_version" {
   type = string
 }
 
-variable "subnet_cidr" {
-  type = string
-}
-
 variable "talos_api_allowed_cidr" {
   description = "The CIDR from which to allow to access the Talos API"
   type        = string

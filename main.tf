@@ -22,7 +22,6 @@ module "cluster" {
   project_name                = var.project_name
   talos_version               = var.talos_version
   region                      = var.region
-  subnet_cidr                 = var.subnet_cidr
   kubernetes_api_allowed_cidr = var.kubernetes_api_allowed_cidr
   talos_api_allowed_cidr      = var.talos_api_allowed_cidr
   control_plane_nodes         = var.control_plane_nodes
@@ -82,5 +81,6 @@ module "post_install" {
   }
 
   project_name = var.project_name
+  region = var.region
 }
 
