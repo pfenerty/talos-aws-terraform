@@ -3,15 +3,15 @@ resource "aws_iam_user" "ebs" {
 }
 
 resource "aws_iam_policy" "ebs" {
-  name   = "${var.project_name}_ebs"
+  name = "${var.project_name}_ebs"
   policy = templatefile("${path.module}/ebs-iam.json.tmpl", {
-    account_id = var.aws_account_id,
+    account_id   = var.aws_account_id,
     project_name = var.project_name
   })
 }
 
 resource "aws_iam_user_policy_attachment" "ebs" {
-  user = aws_iam_user.ebs.name
+  user       = aws_iam_user.ebs.name
   policy_arn = aws_iam_policy.ebs.arn
 }
 

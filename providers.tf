@@ -38,33 +38,45 @@ provider "aws" {
   profile                  = "default"
   default_tags {
     tags = {
-      project_name = var.project_name
+      "kubernetes.io/cluster/${var.project_name}" = "owned"
     }
   }
 }
 
-provider "kubernetes" {
-  host                   = yamldecode(module.talos.kubeconfig)["clusters"][0]["cluster"]["server"]
-  cluster_ca_certificate = base64decode(yamldecode(module.talos.kubeconfig)["clusters"][0]["cluster"]["certificate-authority-data"])
+provider "talos" {}
 
-  client_certificate = base64decode(yamldecode(module.talos.kubeconfig)["users"][0]["user"]["client-certificate-data"])
-  client_key         = base64decode(yamldecode(module.talos.kubeconfig)["users"][0]["user"]["client-key-data"])
+provider "kubernetes" {
+  host                   = yamldecode(module.talos_bootstrap.kubeconfig)["clusters"][0]["cluster"]["server"]
+  cluster_ca_certificate = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["clusters"][0]["cluster"]["certificate-authority-data"])
+
+  client_certificate = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["users"][0]["user"]["client-certificate-data"])
+  client_key         = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["users"][0]["user"]["client-key-data"])
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = yamldecode(module.talos_bootstrap.kubeconfig)["clusters"][0]["cluster"]["server"]
+    cluster_ca_certificate = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["clusters"][0]["cluster"]["certificate-authority-data"])
+
+    client_certificate = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["users"][0]["user"]["client-certificate-data"])
+    client_key         = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["users"][0]["user"]["client-key-data"])
+  }
 }
 
 provider "flux" {
   kubernetes = {
-    host                   = yamldecode(module.talos.kubeconfig)["clusters"][0]["cluster"]["server"]
-    cluster_ca_certificate = base64decode(yamldecode(module.talos.kubeconfig)["clusters"][0]["cluster"]["certificate-authority-data"])
+    host                   = yamldecode(module.talos_bootstrap.kubeconfig)["clusters"][0]["cluster"]["server"]
+    cluster_ca_certificate = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["clusters"][0]["cluster"]["certificate-authority-data"])
 
-    client_certificate = base64decode(yamldecode(module.talos.kubeconfig)["users"][0]["user"]["client-certificate-data"])
-    client_key         = base64decode(yamldecode(module.talos.kubeconfig)["users"][0]["user"]["client-key-data"])
+    client_certificate = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["users"][0]["user"]["client-certificate-data"])
+    client_key         = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["users"][0]["user"]["client-key-data"])
   }
   git = {
-    url    = var.enable_flux_post_install ? var.flux_git_url : "ssh://github.com"
-    branch = var.flux_git_branch
+    url    = var.post_install.flux.enabled ? var.post_install.flux.git_url : "ssh://github.com"
+    branch = var.post_install.flux.git_branch
     ssh = {
       username    = "git"
-      private_key = var.flux_ssh_private_key
+      private_key = var.post_install.flux.ssh_key
     }
   }
 }
