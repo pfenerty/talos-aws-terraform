@@ -24,84 +24,77 @@ variable "project_name" {
 
 variable "control_plane_nodes" {
   type        = number
-  default     = 3
+  default     = 1
   description = "Number of control plane nodes"
 }
 
 variable "control_plane_node_instance_type" {
   type        = string
-  default     = "t3.small"
+  default     = "t2.large"
   description = "AWS EC2 instance type for control plane nodes"
 }
 
-variable "worker_nodes" {
+variable "worker_nodes_min" {
   type        = number
-  default     = 0
+  default     = 1
   description = "Minimum number of worker nodes for the autoscaling group"
+}
+
+variable "worker_nodes_max" {
+  type        = number
+  default     = 5
+  description = "Maximum number of worker nodes for the autoscaling group"
 }
 
 variable "worker_node_instance_type" {
   type        = string
-  default     = "t3.small"
+  default     = "t2.large"
   description = "AWS EC2 instance type for worker nodes"
 }
 
 variable "talos_version" {
   type        = string
-  default     = "v1.4.7"
+  default     = "v1.5.0"
   description = "Talos Linux version"
 }
 
 variable "kubernetes_version" {
   type        = string
-  default     = "1.27.4"
+  default     = "1.28.0"
   description = "Kubernetes version"
-}
-
-variable "enable_cilium" {
-  type        = bool
-  default     = true
-  description = "Use Cilium as the CNI, replaces Talos default flannel"
 }
 
 variable "cilium_version" {
   type        = string
-  default     = "1.14.0"
+  default     = "1.14.1"
   description = "Version of Cilium to deploy"
 }
 
-variable "enable_cilium_hubble" {
-  type        = bool
-  default     = true
-  description = "Enable Cilium Hubble"
-}
-
-variable "cilium_replace_kube_proxy" {
-  type        = bool
-  default     = true
-  description = "Use Cilium to replace Kube Proxy"
-}
-
-variable "enable_flux_post_install" {
-  type        = bool
-  default     = true
-  description = "Enable flux bootstrap and post install resources"
-}
-
-variable "flux_git_url" {
-  type        = string
-  description = "Git URL to initialize flux-system"
-  default = ""
-}
-
-variable "flux_git_branch" {
-  type        = string
-  description = "Git branch to initialize flux-system"
-  default = ""
-}
-
-variable "flux_ssh_private_key" {
-  type        = string
-  description = "SSH key to use for Flux git auth"
-  default = ""
+variable "post_install" {
+  type = object({
+    flux = object({
+      enabled    = bool
+      git_url    = string
+      git_branch = string
+      ssh_key    = string
+    })
+    extras = object({
+      ebs        = bool
+      linkerd    = bool
+      autoscaler = bool
+    })
+  })
+  default = {
+    flux = {
+      enabled    = false
+      git_url    = ""
+      git_branch = ""
+      ssh_key    = ""
+    }
+    extras = {
+      ebs        = false
+      linkerd    = false
+      autoscaler = false
+    }
+  }
 }

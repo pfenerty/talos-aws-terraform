@@ -1,78 +1,102 @@
 resource "null_resource" "prechecks" {
   lifecycle {
     precondition {
-      condition = !(var.enable_flux_post_install && var.flux_git_url == "")
+      condition     = !(var.post_install.flux.enabled && var.post_install.flux.git_url == "")
       error_message = "If Flux post install is enabled, you must provide a git url to bootstrap flux"
     }
 
     precondition {
-      condition = !(var.enable_flux_post_install && var.flux_git_branch == "")
+      condition     = !(var.post_install.flux.enabled && var.post_install.flux.git_branch == "")
       error_message = "If Flux post install is enabled, you must provide a git branch to bootstrap flux"
     }
 
     precondition {
-      condition = !(var.enable_flux_post_install && var.flux_ssh_private_key == "")
+      condition     = !(var.post_install.flux.enabled && var.post_install.flux.ssh_key == "")
       error_message = "If Flux post install is enabled, you must provide a git ssh key to bootstrap flux"
+    }
+
+    precondition {
+      condition     = !(!var.post_install.flux.enabled && (var.post_install.extras.ebs || var.post_install.extras.autoscaler || var.post_install.extras.linkerd))
+      error_message = "Post Install extras are enabled but Flux post install is not. The extras as designed with Flux. Enabled Flux post install if you want to use them."
     }
   }
 }
 
-module "cluster" {
-  source                      = "./cloud_infra"
+module "networking" {
+  source                      = "./cloud_infra/networking"
   project_name                = var.project_name
-  talos_version               = var.talos_version
   region                      = var.region
   kubernetes_api_allowed_cidr = var.kubernetes_api_allowed_cidr
   talos_api_allowed_cidr      = var.talos_api_allowed_cidr
-  control_plane_nodes         = var.control_plane_nodes
-  control_plane_instance_type = var.control_plane_node_instance_type
-  worker_nodes                = var.worker_nodes
-  worker_instance_type        = var.worker_node_instance_type
 }
 
-module "talos" {
-  source              = "./talos"
-  project_name        = var.project_name
-  load_balancer_dns   = module.cluster.load_balancer_dns
-  control_plane_nodes = module.cluster.control_plane_nodes
-  worker_nodes        = module.cluster.worker_nodes
-  kubernetes_version  = var.kubernetes_version
-  talos_version       = var.talos_version
+module "talos_config" {
+  source             = "./talos/config"
+  project_name       = var.project_name
+  load_balancer_dns  = module.networking.load_balancer_dns
+  kubernetes_version = var.kubernetes_version
+  talos_version      = var.talos_version
 
-  cilium                   = var.enable_cilium
-  cilium_version           = var.cilium_version
-  cilium_enable_hubble     = var.enable_cilium_hubble
-  cilium_proxy_replacement = var.cilium_replace_kube_proxy
-
-  aws_topology = {
-    region           = var.region
-    az               = module.cluster.availability_zone
-    cp_instance_type = var.control_plane_node_instance_type
-    wk_instance_type = var.worker_node_instance_type
+  providers = {
+    talos = talos
   }
+}
 
-  cni                = var.enable_cilium ? "cilium" : "flannel"
-  disable_kube_proxy = var.cilium_replace_kube_proxy
+module "compute" {
+  source                          = "./cloud_infra/compute"
+  project_name                    = var.project_name
+  talos_version                   = var.talos_version
+  region                          = var.region
+  subnets                         = module.networking.public_subnets
+  control_plane_security_group_id = module.networking.control_plane_security_group_id
+  internal_security_group_id      = module.networking.internal_security_group_id
+  control_plane_nodes             = var.control_plane_nodes
+  control_plane_instance_type     = var.control_plane_node_instance_type
+  worker_nodes_min                = var.worker_nodes_min
+  worker_nodes_max                = var.worker_nodes_max
+  worker_instance_type            = var.worker_node_instance_type
+  control_plane_machine_config    = module.talos_config.control_plane_machine_config
+  worker_machine_config           = module.talos_config.worker_machine_config
+  load_balancer_target_group_arn  = module.networking.load_balancer_target_group_arn
+}
+
+data "aws_instances" "control_plane_instances" {
+  depends_on = [
+    module.compute
+  ]
+  filter {
+    name   = "tag:aws:autoscaling:groupName"
+    values = [module.compute.control_plane_autoscaling_group_name]
+  }
+}
+
+module "talos_bootstrap" {
+  source       = "./talos/bootstrap"
+  talos_config = module.talos_config.talosconfig
+  public_ip    = data.aws_instances.control_plane_instances.public_ips[0]
+  private_ip   = data.aws_instances.control_plane_instances.private_ips[0]
+
+  providers = {
+    talos = talos
+  }
 }
 
 resource "time_sleep" "wait_for_cluster_ready" {
-  count = var.enable_flux_post_install ? 1 : 0
-
-  depends_on      = [
-    module.cluster,
-    module.talos
+  depends_on = [
+    module.networking,
+    module.compute,
+    module.talos_bootstrap
   ]
   create_duration = "90s"
 }
 
 module "post_install" {
-  count = var.enable_flux_post_install ? 1 : 0
-
   source = "./post-install"
 
   depends_on = [
-    module.cluster,
-    module.talos,
+    module.networking,
+    module.compute,
+    module.talos_bootstrap,
     time_sleep.wait_for_cluster_ready
   ]
 
@@ -81,6 +105,10 @@ module "post_install" {
   }
 
   project_name = var.project_name
-  region = var.region
-}
+  region       = var.region
 
+  cilium_version   = var.cilium_version
+  k8s_service_host = module.networking.load_balancer_dns
+
+  enables = var.post_install
+}
