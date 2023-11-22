@@ -42,6 +42,16 @@ module "autoscaler" {
   depends_on = [flux_bootstrap_git.this]
 }
 
+module "vault" {
+  count = var.enables.extras.vault ? 1 : 0
+  source = "./vault"
+
+  project_name   = var.project_name
+  region         = var.region
+
+  depends_on = [flux_bootstrap_git.this]
+}
+
 resource "kubernetes_secret" "aws_lb_config" {
   count = var.enables.flux.enabled ? 1 : 0
 

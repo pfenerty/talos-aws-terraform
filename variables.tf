@@ -82,6 +82,7 @@ variable "post_install" {
       ebs        = bool
       linkerd    = bool
       autoscaler = bool
+      vault      = bool
     })
   })
   default = {
@@ -95,6 +96,7 @@ variable "post_install" {
       ebs        = false
       linkerd    = false
       autoscaler = false
+      vault      = false
     }
   }
 }

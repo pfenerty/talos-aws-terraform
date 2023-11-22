@@ -26,19 +26,7 @@ variable "enables" {
       ebs        = bool
       linkerd    = bool
       autoscaler = bool
+      vault      = bool
     })
   })
-  default = {
-    flux = {
-      enabled    = false
-      git_url    = ""
-      git_branch = ""
-      ssh_key    = ""
-    }
-    extras = {
-      ebs        = false
-      linkerd    = false
-      autoscaler = false
-    }
-  }
 }
