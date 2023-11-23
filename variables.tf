@@ -54,19 +54,19 @@ variable "worker_node_instance_type" {
 
 variable "talos_version" {
   type        = string
-  default     = "v1.5.0"
+  default     = "v1.5.5"
   description = "Talos Linux version"
 }
 
 variable "kubernetes_version" {
   type        = string
-  default     = "1.28.0"
+  default     = "1.28.4"
   description = "Kubernetes version"
 }
 
 variable "cilium_version" {
   type        = string
-  default     = "1.14.1"
+  default     = "1.14.4"
   description = "Version of Cilium to deploy"
 }
 
