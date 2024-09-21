@@ -9,25 +9,45 @@ resource "helm_release" "cilium" {
     name  = "ipam.mode"
     value = "kubernetes"
   }
+  
+  set {
+    name = "securityContext.capabilities.ciliumAgent"
+    value = "{CHOWN,KILL,NET_ADMIN,NET_RAW,IPC_LOCK,SYS_ADMIN,SYS_RESOURCE,DAC_OVERRIDE,FOWNER,SETGID,SETUID}"
+  }
 
   set {
-    name  = "securityContext.privileged"
+    name = "securityContext.capabilities.cleanCiliumState"
+    value = "{NET_ADMIN,SYS_ADMIN,SYS_RESOURCE}"
+  }
+
+  set {
+    name = "cgroup.autoMount.enabled"
+    value = "false"
+  }
+
+  set {
+    name = "cgroup.hostRoot"
+    value = "/sys/fs/cgroup"
+  }
+
+  # set {
+  #   name  = "securityContext.privileged"
+  #   value = "true"
+  # }
+
+  set {
+    name  = "kubeProxyReplacement"
     value = "true"
   }
 
   set {
-    name  = "kubeProxyReplacement"
-    value = "strict"
-  }
-
-  set {
     name  = "k8sServiceHost"
-    value = var.k8s_service_host
+    value = "localhost"
   }
 
   set {
     name  = "k8sServicePort"
-    value = 443
+    value = 7445
   }
 
   set {

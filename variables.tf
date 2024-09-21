@@ -54,13 +54,13 @@ variable "worker_node_instance_type" {
 
 variable "talos_version" {
   type        = string
-  default     = "v1.7.5"
+  default     = "v1.7.6"
   description = "Talos Linux version"
 }
 
 variable "kubernetes_version" {
   type        = string
-  default     = "1.30.1"
+  default     = "1.30.5"
   description = "Kubernetes version"
 }
 
