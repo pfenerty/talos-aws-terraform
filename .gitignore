@@ -38,3 +38,5 @@ kubeconfig
 talosconfig
 worker.yaml
 control-plane.yaml
+
+.DS_Store

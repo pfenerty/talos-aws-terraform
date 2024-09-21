@@ -69,7 +69,7 @@ resource "aws_autoscaling_group" "control_plane" {
   vpc_zone_identifier  = var.subnets
 
   lifecycle {
-    ignore_changes = [load_balancers, target_group_arns]
+    ignore_changes        = [load_balancers, target_group_arns]
     create_before_destroy = true
   }
 
@@ -158,7 +158,7 @@ resource "aws_autoscaling_group" "worker" {
   vpc_zone_identifier  = var.subnets
 
   lifecycle {
-    ignore_changes = [load_balancers, target_group_arns]
+    ignore_changes        = [load_balancers, target_group_arns]
     create_before_destroy = true
   }
 
