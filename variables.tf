@@ -1,6 +1,6 @@
 variable "region" {
   type        = string
-  default     = "us-east-1"
+  default     = "us-east-2"
   description = "AWS region to create infastructure in"
 }
 
@@ -18,7 +18,7 @@ variable "kubernetes_api_allowed_cidr" {
 
 variable "project_name" {
   type        = string
-  default     = "my-cluster"
+  default     = "talos-cluster"
   description = "Project name, used to give names to various resources"
 }
 
@@ -30,7 +30,7 @@ variable "control_plane_nodes" {
 
 variable "control_plane_node_instance_type" {
   type        = string
-  default     = "t2.large"
+  default     = "t3.medium"
   description = "AWS EC2 instance type for control plane nodes"
 }
 
@@ -48,25 +48,25 @@ variable "worker_nodes_max" {
 
 variable "worker_node_instance_type" {
   type        = string
-  default     = "t2.large"
+  default     = "t3.medium"
   description = "AWS EC2 instance type for worker nodes"
 }
 
 variable "talos_version" {
   type        = string
-  default     = "v1.5.5"
+  default     = "v1.7.6"
   description = "Talos Linux version"
 }
 
 variable "kubernetes_version" {
   type        = string
-  default     = "1.28.4"
+  default     = "1.30.5"
   description = "Kubernetes version"
 }
 
 variable "cilium_version" {
   type        = string
-  default     = "1.14.4"
+  default     = "1.16.1"
   description = "Version of Cilium to deploy"
 }
 

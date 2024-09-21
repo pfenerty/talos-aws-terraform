@@ -1,5 +1,9 @@
-variable "talos_config" {
-  type = string
+variable "client_configuration" {
+  type = object({
+    ca_certificate     = string
+    client_certificate = string
+    client_key         = string
+  })
 }
 
 variable "public_ip" {

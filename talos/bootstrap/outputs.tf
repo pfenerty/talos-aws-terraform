@@ -1,3 +1,3 @@
 output "kubeconfig" {
-  value = talos_cluster_kubeconfig.kubeconfig.kube_config
+  value = data.talos_cluster_kubeconfig.kubeconfig.kubeconfig_raw
 }

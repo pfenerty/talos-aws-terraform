@@ -71,10 +71,10 @@ data "aws_instances" "control_plane_instances" {
 }
 
 module "talos_bootstrap" {
-  source       = "./talos/bootstrap"
-  talos_config = module.talos_config.talosconfig
-  public_ip    = data.aws_instances.control_plane_instances.public_ips[0]
-  private_ip   = data.aws_instances.control_plane_instances.private_ips[0]
+  source               = "./talos/bootstrap"
+  client_configuration = module.talos_config.client_configuration
+  public_ip            = data.aws_instances.control_plane_instances.public_ips[0]
+  private_ip           = data.aws_instances.control_plane_instances.private_ips[0]
 
   providers = {
     talos = talos
