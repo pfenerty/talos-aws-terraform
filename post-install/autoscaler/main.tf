@@ -22,7 +22,7 @@ resource "aws_iam_access_key" "this" {
 resource "kubernetes_secret" "this" {
   metadata {
     name      = "cluster-autoscaler-config"
-    namespace = "flux-system"
+    namespace = "argocd"
   }
 
   data = {

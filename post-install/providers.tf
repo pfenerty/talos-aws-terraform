@@ -16,10 +16,6 @@ terraform {
       source  = "hashicorp/helm"
       version = "2.9.0"
     }
-    flux = {
-      source  = "fluxcd/flux"
-      version = "1.0.0"
-    }
     random = {
       source  = "hashicorp/random"
       version = "3.5.1"

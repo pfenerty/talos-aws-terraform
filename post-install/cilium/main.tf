@@ -62,7 +62,7 @@ resource "helm_release" "cilium" {
 
   set {
     name  = "encryption.strictMode.enabled"
-    value = "true"
+    value = "false"
   }
 }
 

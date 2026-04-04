@@ -16,10 +16,6 @@ terraform {
       source  = "hashicorp/helm"
       version = "2.9.0"
     }
-    flux = {
-      source  = "fluxcd/flux"
-      version = "1.0.0"
-    }
     random = {
       source  = "hashicorp/random"
       version = "3.5.1"
@@ -60,23 +56,5 @@ provider "helm" {
 
     client_certificate = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["users"][0]["user"]["client-certificate-data"])
     client_key         = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["users"][0]["user"]["client-key-data"])
-  }
-}
-
-provider "flux" {
-  kubernetes = {
-    host                   = yamldecode(module.talos_bootstrap.kubeconfig)["clusters"][0]["cluster"]["server"]
-    cluster_ca_certificate = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["clusters"][0]["cluster"]["certificate-authority-data"])
-
-    client_certificate = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["users"][0]["user"]["client-certificate-data"])
-    client_key         = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["users"][0]["user"]["client-key-data"])
-  }
-  git = {
-    url    = var.post_install.flux.enabled ? var.post_install.flux.git_url : "ssh://github.com"
-    branch = var.post_install.flux.git_branch
-    ssh = {
-      username    = "git"
-      private_key = var.post_install.flux.ssh_key
-    }
   }
 }

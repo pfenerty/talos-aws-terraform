@@ -26,12 +26,12 @@ resource "kubernetes_namespace" "linkerd" {
   }
 }
 
-resource "kubernetes_secret" "linkerd_trust_anchor_flux" {
+resource "kubernetes_secret" "linkerd_trust_anchor_argocd" {
   type = "kubernetes.io/tls"
 
   metadata {
     name      = "linkerd-trust-anchor"
-    namespace = "flux-system"
+    namespace = "argocd"
   }
 
   data = {

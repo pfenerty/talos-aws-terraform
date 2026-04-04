@@ -1,0 +1,142 @@
+# Argo CD Bootstrap Example
+
+This file shows an example structure for your GitOps repository that Argo CD will sync from.
+
+## Directory Structure
+
+Your Git repository should have a structure like this:
+
+```
+your-gitops-repo/
+├── bootstrap/
+│   ├── applications/
+│   │   ├── cert-manager.yaml
+│   │   ├── linkerd.yaml
+│   │   └── cluster-autoscaler.yaml
+│   └── app-of-apps.yaml
+└── manifests/
+    ├── cert-manager/
+    │   └── ...
+    ├── linkerd/
+    │   └── ...
+    └── cluster-autoscaler/
+        └── ...
+```
+
+## Example Bootstrap Application (app-of-apps.yaml)
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bootstrap-apps
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: ssh://git@github.com/your-org/your-repo
+    targetRevision: main
+    path: bootstrap/applications
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+```
+
+## Example Cert-Manager Application
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    targetRevision: v1.13.0
+    helm:
+      values: |
+        installCRDs: true
+        tolerations:
+          - key: "node.cloudprovider.kubernetes.io/uninitialized"
+            operator: "Equal"
+            value: "true"
+            effect: "NoSchedule"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+```
+
+## Example Cluster Autoscaler Application
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster-autoscaler
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://kubernetes.github.io/autoscaler
+    chart: cluster-autoscaler
+    targetRevision: 9.29.0
+    helm:
+      values: |
+        autoDiscovery:
+          clusterName: ${CLUSTER_NAME}
+        awsRegion: ${AWS_REGION}
+        extraEnv:
+          AWS_ACCESS_KEY_ID:
+            valueFrom:
+              secretKeyRef:
+                name: cluster-autoscaler-config
+                key: access-key-id
+          AWS_SECRET_ACCESS_KEY:
+            valueFrom:
+              secretKeyRef:
+                name: cluster-autoscaler-config
+                key: secret-access-key
+        tolerations:
+          - key: "node.cloudprovider.kubernetes.io/uninitialized"
+            operator: "Equal"
+            value: "true"
+            effect: "NoSchedule"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+```
+
+## Accessing Argo CD UI
+
+After deployment, get the initial admin password:
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+```
+
+Get the LoadBalancer URL:
+
+```bash
+kubectl -n argocd get svc argocd-server -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+```
+
+Open your browser to the LoadBalancer URL and login with:
+- Username: `admin`
+- Password: (from the secret above, or your custom hash if provided)

@@ -4,16 +4,26 @@ module "cilium" {
   k8s_service_host = var.k8s_service_host
 }
 
-resource "random_uuid" "cluster_flux_id" {}
-
-resource "flux_bootstrap_git" "this" {
-  count = var.enables.flux.enabled ? 1 : 0
+module "ccm" {
+  source       = "./ccm"
+  project_name = var.project_name
 
   depends_on = [module.cilium]
+}
 
-  path = "clusters/${random_uuid.cluster_flux_id.result}"
+module "argocd" {
+  count = var.enables.argocd.enabled ? 1 : 0
 
-  kustomization_override = file("${path.module}/flux.patch.yaml")
+  source = "./argocd"
+
+  depends_on = [module.cilium, module.ccm]
+
+  argocd_version      = var.argocd_version
+  git_url             = var.enables.argocd.git_url
+  git_branch          = var.enables.argocd.git_branch
+  git_path            = var.enables.argocd.git_path
+  git_ssh_key         = var.enables.argocd.ssh_key
+  admin_password_hash = var.enables.argocd.admin_password_hash
 }
 
 module "ebs" {
@@ -28,7 +38,7 @@ module "linkerd" {
   count  = var.enables.extras.linkerd ? 1 : 0
   source = "./linkerd"
 
-  depends_on = [flux_bootstrap_git.this]
+  depends_on = [module.argocd]
 }
 
 module "autoscaler" {
@@ -39,17 +49,17 @@ module "autoscaler" {
   aws_account_id = data.aws_caller_identity.current.account_id
   region         = var.region
 
-  depends_on = [flux_bootstrap_git.this]
+  depends_on = [module.argocd]
 }
 
 resource "kubernetes_secret" "aws_lb_config" {
-  count = var.enables.flux.enabled ? 1 : 0
+  count = var.enables.argocd.enabled ? 1 : 0
 
-  depends_on = [flux_bootstrap_git.this]
+  depends_on = [module.argocd]
 
   metadata {
     name      = "aws-loadbalancer-config"
-    namespace = "flux-system"
+    namespace = "argocd"
   }
 
   data = {

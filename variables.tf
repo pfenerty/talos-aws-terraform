@@ -1,6 +1,6 @@
 variable "region" {
   type        = string
-  default     = "us-east-2"
+  default     = "ap-southeast-1"
   description = "AWS region to create infastructure in"
 }
 
@@ -70,13 +70,21 @@ variable "cilium_version" {
   description = "Version of Cilium to deploy"
 }
 
+variable "argocd_version" {
+  type        = string
+  default     = "5.51.6"
+  description = "Version of Argo CD Helm chart to deploy"
+}
+
 variable "post_install" {
   type = object({
-    flux = object({
-      enabled    = bool
-      git_url    = string
-      git_branch = string
-      ssh_key    = string
+    argocd = object({
+      enabled            = bool
+      git_url            = string
+      git_branch         = string
+      git_path           = string
+      ssh_key            = string
+      admin_password_hash = string
     })
     extras = object({
       ebs        = bool
@@ -85,11 +93,13 @@ variable "post_install" {
     })
   })
   default = {
-    flux = {
-      enabled    = false
-      git_url    = ""
-      git_branch = ""
-      ssh_key    = ""
+    argocd = {
+      enabled             = false
+      git_url             = ""
+      git_branch          = "main"
+      git_path            = "bootstrap"
+      ssh_key             = ""
+      admin_password_hash = ""
     }
     extras = {
       ebs        = false
@@ -97,4 +107,5 @@ variable "post_install" {
       autoscaler = false
     }
   }
+  description = "Post-installation configuration for Argo CD and extras"
 }
