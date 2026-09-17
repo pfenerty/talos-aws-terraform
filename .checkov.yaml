@@ -1,11 +1,12 @@
 # Checks that are deliberately not applicable to this cluster. Everything not
-# listed here is a finding we intend to fix; see the CI job, which runs in
-# soft-fail mode until the remaining infrastructure-level findings are closed.
+# listed here is a finding we intend to fix, and the CI job fails on one.
 skip-check:
   # Nodes need public IPs: there is no NAT gateway in this VPC, and the Talos
   # API and Kubernetes API are reached directly over the internet.
   - CKV_AWS_88
   # Hop limit 2 is required for pods to reach IMDS through the host network.
+  # IMDSv2 is enforced (http_tokens = "required"), which is the control that
+  # actually matters here.
   - CKV_AWS_341
   # Flow logs, load balancer access logs and deletion protection are cost and
   # ceremony this cluster does not need.
@@ -21,3 +22,14 @@ skip-check:
   # group every node sits in, and Talos needs to reach the internet to pull
   # images.
   - CKV_AWS_382
+  # Pinning is offered through the availability_zones variable. The data source
+  # stays unfiltered so the default keeps working in any region; the check
+  # cannot see the variable.
+  - CKV_AWS_394
+  # False positive across module boundaries: both groups are attached, by id,
+  # through the compute module's launch templates.
+  - CKV2_AWS_5
+  # ELB health checks would let the autoscaling group terminate a control plane
+  # node whose API server has not come up yet, which during a Talos bootstrap
+  # is a death spiral. EC2 health checks are the safer default here.
+  - CKV2_AWS_15
