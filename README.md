@@ -124,6 +124,10 @@ repository or the AWS layer instead, how the config patches compose, and a
 known limitation that has no good answer yet: a machine config change does
 not reconfigure running nodes, it replaces them.
 
+It also carries a rule-by-rule coverage matrix for all 92 rules of the DISA
+Kubernetes STIG, marking each as covered here, owed by the Flux bootstrap
+repository, uncheckable as written on an immutable node, or not covered.
+
 ## Node autoscaling
 
 Worker capacity comes from [Karpenter](https://karpenter.sh), enabled with
