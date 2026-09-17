@@ -19,7 +19,7 @@ resource "aws_iam_access_key" "this" {
   user = aws_iam_user.this.name
 }
 
-resource "kubernetes_secret" "this" {
+resource "kubernetes_secret_v1" "this" {
   metadata {
     name      = "cluster-autoscaler-config"
     namespace = "flux-system"

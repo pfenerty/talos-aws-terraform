@@ -84,7 +84,7 @@ resource "tls_self_signed_cert" "hubble" {
   is_ca_certificate = true
 }
 
-resource "kubernetes_secret" "hubble_trust_anchor" {
+resource "kubernetes_secret_v1" "hubble_trust_anchor" {
   type = "kubernetes.io/tls"
 
   metadata {

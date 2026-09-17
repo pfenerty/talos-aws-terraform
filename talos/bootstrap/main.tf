@@ -4,7 +4,7 @@ resource "talos_machine_bootstrap" "talos_bootstrap" {
   node                 = var.private_ip
 }
 
-data "talos_cluster_kubeconfig" "kubeconfig" {
+resource "talos_cluster_kubeconfig" "kubeconfig" {
   client_configuration = var.client_configuration
   endpoint             = var.public_ip
   node                 = var.private_ip
@@ -15,6 +15,6 @@ data "talos_cluster_kubeconfig" "kubeconfig" {
 }
 
 resource "local_file" "kubeconfig" {
-  content  = data.talos_cluster_kubeconfig.kubeconfig.kubeconfig_raw
+  content  = talos_cluster_kubeconfig.kubeconfig.kubeconfig_raw
   filename = "kubeconfig"
 }
