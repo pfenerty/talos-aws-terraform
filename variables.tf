@@ -132,9 +132,10 @@ variable "hardening" {
     enabled                        = optional(bool, false)
     pod_security_enforce           = optional(string, "restricted")
     pod_security_exempt_namespaces = optional(list(string), ["kube-system"])
+    kubelet_serving_certificates   = optional(bool, false)
   })
   default     = {}
-  description = "Machine config hardening, off by default because it changes what the cluster will admit. `enabled` turns on a real API server audit policy and Pod Security Admission enforcing the standard named below. It is the machine config half of a hardening baseline and not the whole of one: docs/hardening.md sets out what it covers, what Talos already does without it, and what has to be enforced in the Flux repository or the AWS layer instead."
+  description = "Machine config hardening, off by default because it changes what the cluster will admit. `enabled` turns on a real API server audit policy and Pod Security Admission enforcing the standard named below. It is the machine config half of a hardening baseline and not the whole of one: docs/hardening.md sets out what it covers, what Talos already does without it, and what has to be enforced in the Flux repository or the AWS layer instead. `kubelet_serving_certificates` makes the kubelet bootstrap a CA-signed serving certificate rather than self-signing one, and requires a CSR approver running in the cluster - a Flux dependency this module cannot install, and without which `kubectl logs` and `exec` stop working."
 }
 
 variable "config_output_path" {

@@ -24,11 +24,12 @@ So `hardening` is the machine config half of a baseline, not a baseline. It
 does not make the cluster STIG compliant, and nothing in this repository
 produces evidence for an assessor. The rule-by-rule accounting is in the
 coverage matrix below: of the 92 Kubernetes STIG rules, 51 are satisfied by
-Talos defaults, 4 by `hardening`, 11 belong wholly to the Flux bootstrap
+Talos defaults, 6 by `hardening`, 11 belong wholly to the Flux bootstrap
 repository and are not written yet, 22 cannot be checked as written on an
-immutable node, and 4 are not covered anywhere. Those counts total 92;
-V-242437 is counted among the four and appears in the Flux table as well,
-because it is the one rule split across both.
+immutable node, and 2 are not covered anywhere. Those counts total 92;
+V-242437 is counted among the six and appears in the Flux table as well,
+because it is the one rule split across both. The 22 get a written
+disposition of their own, after the matrix.
 
 ## What Talos already does, unprompted
 
@@ -61,8 +62,9 @@ Two consequences worth stating plainly:
   addresses the AWS platform already installs. Leave it alone unless you have
   an approved time source that is not Amazon's.
 * Patches for the kubelet settings above render byte-for-byte identical
-  configs. That was measured, not assumed, and it is why `hardening` has no
-  worker half.
+  configs. That was measured, not assumed. The kubelet's serving certificate
+  is the one exception, and the only reason `hardening` has a worker half at
+  all.
 
 ## What `hardening` adds
 
@@ -87,14 +89,27 @@ stay at `Metadata` deliberately: `RequestResponse` on them would copy secret
 values into the audit log, which turns the log into the thing you have to
 protect most.
 
-Enabling it costs about 1.1 KB of control plane user data (11336 → 12463
-bytes of the 16384 available).
+**A CA-signed kubelet serving certificate**, behind its own
+`kubelet_serving_certificates` flag rather than `enabled`, because it has a
+prerequisite outside this repository. Left alone, the kubelet self-signs the
+certificate it serves on port 10250 and the API server never checks it. The
+flag sets two things that are each pointless without the other:
+
+* `serverTLSBootstrap: true` on the kubelet, so it requests a certificate from
+  the cluster CA and rotates it, instead of self-signing.
+* `kubelet-certificate-authority` on the API server, so it verifies what the
+  kubelet presents. Talos sets no such flag by default, which is why issuing a
+  properly signed certificate changes nothing observable until this is set too.
+
+Enabling `hardening` costs about 1.1 KB of control plane user data (11336 →
+12463 bytes of the 16384 available); adding the serving certificates costs
+another 150 bytes on the control plane and 58 on each worker.
 
 ## What it deliberately does not do
 
 | Item | Why not |
 |---|---|
-| `serverTLSBootstrap` | Needs something in the cluster approving kubelet serving CSRs. Without an approver the serving certificate never issues and the node is broken. |
+| Enabling `kubelet_serving_certificates` by default | It depends on a CSR approver that has to be deployed by Flux, and turning it on without one breaks `kubectl logs` and `exec`. It is opt-in for that reason, not because the setting is wrong. |
 | Node disk encryption | The root EBS volume is already encrypted by the launch template. Talos can do LUKS2 on `EPHEMERAL`/`STATE` via `VolumeConfig`, but every key kind is awkward here: a `static` passphrase would sit in the machine config, `tpm` needs a TPM the instance types used here do not present, and `nodeID` ties the volume to the node. |
 | FIPS 140-3 | An image choice, not a config field. It needs an Image Factory schematic and a different AMI; `modules/cluster/cloud-infra/compute` pins the stock Sidero AMI by owner and name. |
 | Shipping the audit log off the node | `machine.logging.destinations` carries Talos service logs only, as `json_lines` over TCP or UDP. The kube-apiserver audit log is a file on the control plane node and needs a collector running in the cluster. |
@@ -104,8 +119,8 @@ bytes of the 16384 available).
 ## Kubernetes STIG coverage matrix
 
 Rule IDs are from the DISA Kubernetes STIG as published on 2026-02-12, which
-carries 92 rules. All 92 appear below, each once, except V-242437, which is
-split: its cluster-wide half is configuration here and its per-namespace half
+carries 92 rules. All 92 appear in the matrix below, each once, except
+V-242437, which is split: its cluster-wide half is configuration here and its per-namespace half
 is Flux's. Severities are deliberately omitted rather than transcribed from a
 secondary source; take CAT levels from the official XCCDF when you need them.
 
@@ -153,6 +168,7 @@ configs rendered by this module.
 | V-242437 | Pod security policy set | PSA replaces PSP. `hardening` sets the cluster-wide default; per-namespace labels are Flux's half, below |
 | V-254800 | Pod Security Admission control file configured | `cluster.apiServer.admissionControl`. Talos configures one by default at `baseline`; `hardening` raises it to `restricted` |
 | V-254801 | PodSecurity admission controller enabled | same file, applied to every namespace outside the exemption list |
+| V-242424, V-242425 | Kubelet `tlsPrivateKeyFile` and `tlsCertFile` | `kubelet_serving_certificates`. **Deviation in the check, not the control.** The kubelet bootstraps a CA-signed certificate and rotates it, and the API server verifies it. The config fields the check reads stay empty, because the certificate is issued and renewed rather than placed - it lives at `/var/lib/kubelet/pki/kubelet-server-current.pem`. Setting the fields literally would mean baking a certificate and private key into user data that every node in the autoscaling group shares, with SANs for addresses that do not exist at render time. Rotation is the compensating control. **Requires the Flux dependency below.** |
 
 ### Belongs in the Flux bootstrap repository
 
@@ -176,6 +192,33 @@ description of what it does.
 | V-274883 | Sensitive data held in Secrets or an external store |
 | V-274884 | Secret access restricted to need-to-know via RBAC |
 
+**Named dependency: a kubelet-serving CSR approver.** This one is not a rule of
+its own - it is what V-242424 and V-242425 above depend on, and the reason
+`kubelet_serving_certificates` is opt-in. kube-controller-manager refuses to
+auto-approve `kubernetes.io/kubelet-serving` CSRs by design: it cannot verify
+that the SANs a node requests belong to that node. Something has to make that
+judgement, and in practice that is
+[`kubelet-csr-approver`](https://github.com/postfinance/kubelet-csr-approver)
+as a HelmRelease.
+
+Two things about configuring it here. Nodes register with their FQDN, so names
+look like `ip-172-31-4-17.eu-west-2.compute.internal` and the provider regex
+has to match that shape. And the approver confirms the name resolves to the
+requesting address: the VPC sets neither DNS attribute explicitly
+(`modules/cluster/cloud-infra/networking/main.tf`), so `enable_dns_support`
+is on by default and private internal names resolve, while
+`enable_dns_hostnames` stays off and governs public hostnames only. If that
+turns out not to hold, the approver has `bypassDnsResolution` with a tighter
+regex as the fallback.
+
+Order of operations: install the approver first. With
+`kubelet_serving_certificates` on and no approver, CSRs sit pending - nodes
+still register and still run pods, because that path uses the client
+certificate, but `kubectl logs`, `exec`, `port-forward` and metrics-server
+fail until the CSRs are approved. On a new cluster that window is harmless,
+since bootstrap does not need kubelet serving certificates; on a running one
+it is a visible outage of exactly those operations.
+
 ### Not applicable as written
 
 Every rule in this group checks the ownership or permissions of a file on a
@@ -187,7 +230,9 @@ kubeconfig is absent too.
 
 These are not passes. They are rules whose check procedure cannot be executed,
 and an assessor will want each one dispositioned as not-applicable with the
-immutability argument attached.
+immutability argument attached. That disposition is written out in full in the
+section immediately after this matrix, including the evidence that can be
+produced in place of a `stat`.
 
 | Rule | Control |
 |---|---|
@@ -204,9 +249,115 @@ immutability argument attached.
 
 | Rule | Control | Why not, and what it would take |
 |---|---|---|
-| V-242424, V-242425 | Kubelet `tlsCertFile` and `tlsPrivateKeyFile` set | The kubelet self-signs its serving certificate. Fixing this properly means `serverTLSBootstrap: true` plus a CSR approver running in the cluster; enabling the first without the second leaves nodes without a serving certificate |
 | V-242438 | API server request timeouts configured | `request-timeout` is left at the Kubernetes default of 60s rather than set explicitly. One entry in `cluster.apiServer.extraArgs` closes it, and the check wants it stated |
 | V-245544 | Approved organizational certificate and key pair | The cluster PKI is self-signed by Talos. Using an organizational CA means generating the machine secrets outside this module and feeding them in, which `talos_machine_secrets` does not currently do here |
+
+## Disposition for the 22 uncheckable rules
+
+Written to be handed to an assessor. Each of these rules checks the ownership
+or permissions of a file on a node, by logging in and running `stat`. The
+argument below is why that procedure cannot be executed on Talos, what evidence
+replaces it, and why the risk the control exists to manage is structurally
+absent rather than merely unverified.
+
+Do not paste this into a checklist unread. It is the shape of the argument and
+the facts behind it; the wording that satisfies a particular assessor is
+theirs to accept.
+
+### Applicability statement
+
+Talos Linux is an API-managed, immutable operating system. It ships no shell,
+no SSH daemon, no package manager, and no interactive login of any kind. There
+are no operating system user accounts, so there is no `root` user to own a
+file in the sense the check means, and no `etcd` user either. The root
+filesystem is mounted read-only. All configuration arrives as a single machine
+configuration document, applied over an mTLS-authenticated API.
+
+The consequence for this rule family is twofold:
+
+1. **The check procedure cannot be executed.** It directs the assessor to log
+   in to the node and inspect a path. There is no login. No amount of
+   configuration makes one available.
+2. **Several of the files do not exist.** `kubeadm.conf` has no analogue -
+   Talos does not use kubeadm and never writes that file. The kube-proxy
+   kubeconfig is absent because this cluster runs no kube-proxy at all
+   (`cluster.proxy.disabled`, with Cilium providing the replacement). The
+   administrative kubeconfig is not stored on any node: it is generated on
+   demand through the Talos API.
+
+Where the files do exist, they are at Talos's own paths rather than the ones
+the check names - Kubernetes PKI and component secrets under
+`/system/secrets/kubernetes/`, etcd PKI under `/system/secrets/etcd`, etcd
+data under `/var/lib/etcd`, kubelet material under `/var/lib/kubelet/pki` and
+`/system/secrets/kubelet`, static pod manifests under `/etc/kubernetes/manifests`.
+
+### Why the underlying risk is absent
+
+These controls exist because on a conventional node an operator, a package
+postinstall script, or a compromised process can loosen a file's mode or
+change its owner, and nothing would notice. The control is a periodic check
+for that drift.
+
+On Talos every one of those files is created by the operating system itself,
+at a fixed mode, during boot or during a configuration apply. There is no
+interactive session, no user to act as, no package manager to run a script,
+and a read-only root filesystem underneath. Drift of the kind the control
+detects has no mechanism by which to occur. The file permissions are a
+property of the Talos release, not of how the node was administered - and the
+Talos release is pinned in version control (`talos_version`) and applied by
+Terraform.
+
+This is a stronger position than a passing `stat`, not a weaker one: a passing
+check tells you the permissions were correct at the moment of the check, and
+says nothing about the next hour.
+
+### Evidence that can be produced
+
+The absence of a shell does not mean the absence of evidence. Talos exposes
+the filesystem over its API, and an assessor with a `talosconfig` can obtain
+the same facts the check wants:
+
+* `talosctl -n <node> list -l <path>` returns a directory listing with mode,
+  owner and group - the content of a `stat`, by a different route.
+* `talosctl -n <node> read <path>` returns a file's contents.
+* `talosctl -n <node> get <resource>` returns the running configuration Talos
+  derived, including the rendered admission control and kubelet configuration.
+
+Both are authenticated with mutual TLS against the cluster's Talos PKI and are
+subject to Talos's own RBAC, so the evidence-gathering path is itself
+access-controlled and auditable - unlike an SSH session with a root shell,
+which is what the original procedure assumes.
+
+### Per-family disposition
+
+| Rules | Files | Disposition |
+|---|---|---|
+| V-242405, V-242406, V-242407, V-242408, V-242444, V-242446 | Static pod manifests, KubeletConfiguration, component conf files | Written by Talos at fixed modes under `/etc/kubernetes`; no operator path exists to modify them. Evidence via `talosctl list -l`. |
+| V-242445 | etcd data directory ownership by an `etcd` user | Not applicable: Talos has no OS user accounts. etcd runs as a container managed by Talos, with data under `/var/lib/etcd`. |
+| V-242447, V-242448 | kube-proxy kubeconfig | Not applicable on absence: this cluster runs no kube-proxy. The file is never created. |
+| V-242449, V-242450, V-242452, V-242453, V-242456, V-242457 | Kubelet CA, kubeconfig and config file ownership and permissions | Created by Talos under `/var/lib/kubelet` and `/system/secrets/kubelet` at fixed modes. Evidence via `talosctl list -l`. |
+| V-242451, V-242466, V-242467 | Kubernetes PKI directory, certificates and keys | Held under `/system/secrets/kubernetes/`, written by Talos from the machine configuration. Evidence via `talosctl list -l`. |
+| V-242454, V-242455 | `kubeadm.conf` | Not applicable on absence: Talos does not use kubeadm and never writes this file. |
+| V-242459 | etcd data file permissions | `/var/lib/etcd`, written by Talos-managed etcd at fixed modes. |
+| V-242460 | Administrative kubeconfig permissions | Not applicable on absence: no administrative kubeconfig is stored on the node. It is issued on demand over the Talos API, and in this repository by `talos_cluster_kubeconfig`. |
+
+### Residual risk, stated plainly
+
+The argument above moves the trust boundary rather than removing it. On a
+conventional node, file permissions are the control protecting these secrets;
+on Talos, the control is access to the Talos API, because a credential with
+the `os:admin` role can read any of these files and replace the machine
+configuration outright.
+
+That makes two things elsewhere in this repository more important than any of
+the 22 rules above, and an assessor is entitled to ask about both:
+
+* `talos_api_allowed_cidr` defaults to `0.0.0.0/0`. Port 50000 administers the
+  machines. It should be narrowed to an administrative range.
+* The `talosconfig` this module outputs is the administrative credential for
+  every node. Its handling - where Terraform state lives, who can read it, how
+  it is rotated - is the compensating control that carries the weight the file
+  permission rules were carrying.
 
 ## How the patches are built
 
@@ -245,8 +396,11 @@ machine config *is* the user data. As rendered today:
 |---|---|---|
 | Control plane, `hardening` off | 11336 | 5048 |
 | Control plane, `hardening` on | 12463 | 3921 |
+| Control plane, plus `kubelet_serving_certificates` | 12613 | 3771 |
 | Worker | 2958 | 13426 |
+| Worker, plus `kubelet_serving_certificates` | 3016 | 13368 |
 | Karpenter worker | 3028 | 13356 |
+| Karpenter worker, plus `kubelet_serving_certificates` | 3086 | 13298 |
 
 Each `talos_machine_configuration` data source carries a postcondition
 asserting the result fits. That is not decoration: exceeding the limit
