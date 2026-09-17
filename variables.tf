@@ -52,18 +52,21 @@ variable "worker_node_instance_type" {
   description = "AWS EC2 instance type for worker nodes"
 }
 
+# renovate: datasource=github-releases depName=siderolabs/talos
 variable "talos_version" {
   type        = string
   default     = "v1.14.1"
   description = "Talos Linux version"
 }
 
+# renovate: datasource=github-releases depName=kubernetes/kubernetes extractVersion=^v(?<version>.*)$
 variable "kubernetes_version" {
   type        = string
   default     = "1.37.0"
   description = "Kubernetes version"
 }
 
+# renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io
 variable "cilium_version" {
   type        = string
   default     = "1.20.2"
