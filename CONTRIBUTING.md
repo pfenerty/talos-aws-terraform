@@ -2,9 +2,8 @@
 
 ## Before you push
 
-CI runs `terraform fmt`, `terraform validate`, `tflint` and `checkov`, and all
-four block. `pre-commit install` runs the same set locally, plus the
-`terraform-docs` regeneration.
+`pre-commit install` runs `terraform fmt`, `terraform validate`, `tflint` and
+`checkov` on commit, plus the `terraform-docs` regeneration.
 
 Without pre-commit:
 
@@ -23,7 +22,7 @@ Each module's README carries a generated reference table between
 description above them and regenerate:
 
 ```sh
-terraform-docs -c .terraform-docs.yml cloud-infra/networking
+terraform-docs -c .terraform-docs.yml modules/cluster/cloud-infra/networking
 ```
 
 Every variable needs a `description`. The generated tables are only as useful
@@ -31,11 +30,25 @@ as those are.
 
 ## Conventions
 
-* Directories are kebab-case (`cloud-infra`, `post-install`); outputs live in
-  `outputs.tf`.
-* Provider versions are pinned exactly, in every module that uses a provider,
-  so Renovate can see and bump them. Component versions held in variable
+* Directories are kebab-case (`cloud-infra`, `flux-bootstrap`); outputs live in
+  `outputs.tf`, and provider requirements in `versions.tf`.
+* No module declares a `provider` block. Provider *requirements* go in every
+  module that uses one; provider *configuration* belongs to the caller, and
+  `examples/full` is where it lives. A module carrying a provider block cannot
+  be used with `count`, `for_each` or `depends_on`.
+* Provider versions are `~>` ranges, not exact pins. These constraints are
+  intersected with every other module in a consumer's configuration, so an
+  exact pin makes this one unusable next to anything that has moved on a patch
+  release. Renovate bumps the range floor. Component versions held in variable
   defaults need a `# renovate:` comment above them to be picked up.
+* Nothing is written to the caller's filesystem unless they ask for it.
+  `local_file` and `local_sensitive_file` resources are gated on a path
+  variable that defaults to null; fixed relative filenames collide when the
+  module is instantiated twice.
+* Resource tags come from a `tags` variable threaded down from the parent, not
+  from provider `default_tags`. A module does not get to configure its
+  caller's provider, and the `kubernetes.io/cluster/<name>` tag is load-bearing
+  for the AWS cloud controller manager.
 * Security group rules are standalone
   `aws_vpc_security_group_{ingress,egress}_rule` resources. Do not add inline
   `ingress`/`egress` blocks: mixing the two makes Terraform fight itself.
