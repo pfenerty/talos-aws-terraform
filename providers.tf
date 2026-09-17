@@ -2,31 +2,31 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "4.56.0"
+      version = "6.65.0"
     }
     talos = {
       source  = "siderolabs/talos"
-      version = "0.5.0"
+      version = "0.11.0"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "2.21.1"
+      version = "3.2.1"
     }
     helm = {
       source  = "hashicorp/helm"
-      version = "2.9.0"
+      version = "3.3.0"
     }
     flux = {
       source  = "fluxcd/flux"
-      version = "1.0.0"
+      version = "1.9.5"
     }
     random = {
       source  = "hashicorp/random"
-      version = "3.5.1"
+      version = "3.9.1"
     }
     tls = {
       source  = "hashicorp/tls"
-      version = "4.0.4"
+      version = "4.4.1"
     }
   }
 }
@@ -54,7 +54,7 @@ provider "kubernetes" {
 }
 
 provider "helm" {
-  kubernetes {
+  kubernetes = {
     host                   = yamldecode(module.talos_bootstrap.kubeconfig)["clusters"][0]["cluster"]["server"]
     cluster_ca_certificate = base64decode(yamldecode(module.talos_bootstrap.kubeconfig)["clusters"][0]["cluster"]["certificate-authority-data"])
 

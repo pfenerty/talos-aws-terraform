@@ -5,65 +5,52 @@ resource "helm_release" "cilium" {
   chart      = "cilium"
   version    = var.cilium_version
 
-  set {
-    name  = "ipam.mode"
-    value = "kubernetes"
-  }
-  
-  set {
-    name = "securityContext.capabilities.ciliumAgent"
-    value = "{CHOWN,KILL,NET_ADMIN,NET_RAW,IPC_LOCK,SYS_ADMIN,SYS_RESOURCE,DAC_OVERRIDE,FOWNER,SETGID,SETUID}"
-  }
-
-  set {
-    name = "securityContext.capabilities.cleanCiliumState"
-    value = "{NET_ADMIN,SYS_ADMIN,SYS_RESOURCE}"
-  }
-
-  set {
-    name = "cgroup.autoMount.enabled"
-    value = "false"
-  }
-
-  set {
-    name = "cgroup.hostRoot"
-    value = "/sys/fs/cgroup"
-  }
-
-  # set {
-  #   name  = "securityContext.privileged"
-  #   value = "true"
-  # }
-
-  set {
-    name  = "kubeProxyReplacement"
-    value = "true"
-  }
-
-  set {
-    name  = "k8sServiceHost"
-    value = "localhost"
-  }
-
-  set {
-    name  = "k8sServicePort"
-    value = 7445
-  }
-
-  set {
-    name  = "encryption.enabled"
-    value = "true"
-  }
-
-  set {
-    name  = "encryption.type"
-    value = "wireguard"
-  }
-
-  set {
-    name  = "encryption.strictMode.enabled"
-    value = "true"
-  }
+  set = [
+    {
+      name  = "ipam.mode"
+      value = "kubernetes"
+    },
+    {
+      name  = "securityContext.capabilities.ciliumAgent"
+      value = "{CHOWN,KILL,NET_ADMIN,NET_RAW,IPC_LOCK,SYS_ADMIN,SYS_RESOURCE,DAC_OVERRIDE,FOWNER,SETGID,SETUID}"
+    },
+    {
+      name  = "securityContext.capabilities.cleanCiliumState"
+      value = "{NET_ADMIN,SYS_ADMIN,SYS_RESOURCE}"
+    },
+    {
+      name  = "cgroup.autoMount.enabled"
+      value = "false"
+    },
+    {
+      name  = "cgroup.hostRoot"
+      value = "/sys/fs/cgroup"
+    },
+    {
+      name  = "kubeProxyReplacement"
+      value = "true"
+    },
+    {
+      name  = "k8sServiceHost"
+      value = "localhost"
+    },
+    {
+      name  = "k8sServicePort"
+      value = 7445
+    },
+    {
+      name  = "encryption.enabled"
+      value = "true"
+    },
+    {
+      name  = "encryption.type"
+      value = "wireguard"
+    },
+    {
+      name  = "encryption.strictMode.enabled"
+      value = "true"
+    },
+  ]
 }
 
 resource "tls_private_key" "hubble" {
