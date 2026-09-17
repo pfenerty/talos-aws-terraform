@@ -37,22 +37,42 @@ resource "aws_iam_instance_profile" "control_plane" {
   role = aws_iam_role.control_plane_assume_role.name
 }
 
-resource "aws_launch_configuration" "control_plane" {
-  name_prefix                 = "${var.project_name}_control_plane"
-  image_id                    = data.aws_ami.this.id
-  instance_type               = var.control_plane_instance_type
-  user_data                   = var.control_plane_machine_config
-  security_groups             = [var.control_plane_security_group_id, var.internal_security_group_id]
-  iam_instance_profile        = aws_iam_instance_profile.control_plane.name
-  associate_public_ip_address = true
+resource "aws_launch_template" "control_plane" {
+  name_prefix   = "${var.project_name}_control_plane"
+  image_id      = data.aws_ami.this.id
+  instance_type = var.control_plane_instance_type
+
+  # Launch templates require user data to be base64 encoded; launch
+  # configurations accepted it raw.
+  user_data = base64encode(var.control_plane_machine_config)
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.control_plane.name
+  }
+
+  # Public IP assignment is only available via network_interfaces on a
+  # launch template, which is also where security groups must go: the
+  # top-level vpc_security_group_ids cannot be combined with it.
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [var.control_plane_security_group_id, var.internal_security_group_id]
+    delete_on_termination       = true
+  }
 
   metadata_options {
     http_endpoint               = "enabled"
     http_put_response_hop_limit = 2
   }
 
-  root_block_device {
-    volume_size = 100
+  block_device_mappings {
+    device_name = data.aws_ami.this.root_device_name
+
+    ebs {
+      volume_size           = 100
+      volume_type           = "gp3"
+      encrypted             = true
+      delete_on_termination = true
+    }
   }
 
   lifecycle {
@@ -61,12 +81,15 @@ resource "aws_launch_configuration" "control_plane" {
 }
 
 resource "aws_autoscaling_group" "control_plane" {
-  name                 = "${var.project_name}_control_plane"
-  launch_configuration = aws_launch_configuration.control_plane.name
-  min_size             = var.control_plane_nodes
-  max_size             = var.control_plane_nodes
-  desired_capacity     = var.control_plane_nodes
-  vpc_zone_identifier  = var.subnets
+  name = "${var.project_name}_control_plane"
+  launch_template {
+    id      = aws_launch_template.control_plane.id
+    version = aws_launch_template.control_plane.latest_version
+  }
+  min_size            = var.control_plane_nodes
+  max_size            = var.control_plane_nodes
+  desired_capacity    = var.control_plane_nodes
+  vpc_zone_identifier = var.subnets
 
   lifecycle {
     ignore_changes        = [load_balancers, target_group_arns]
@@ -126,22 +149,42 @@ resource "aws_iam_instance_profile" "worker" {
   role = aws_iam_role.worker_assume_role.name
 }
 
-resource "aws_launch_configuration" "worker" {
-  name_prefix                 = "${var.project_name}_worker"
-  image_id                    = data.aws_ami.this.id
-  instance_type               = var.worker_instance_type
-  user_data                   = var.worker_machine_config
-  security_groups             = [var.internal_security_group_id]
-  iam_instance_profile        = aws_iam_instance_profile.worker.name
-  associate_public_ip_address = true
+resource "aws_launch_template" "worker" {
+  name_prefix   = "${var.project_name}_worker"
+  image_id      = data.aws_ami.this.id
+  instance_type = var.worker_instance_type
+
+  # Launch templates require user data to be base64 encoded; launch
+  # configurations accepted it raw.
+  user_data = base64encode(var.worker_machine_config)
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.worker.name
+  }
+
+  # Public IP assignment is only available via network_interfaces on a
+  # launch template, which is also where security groups must go: the
+  # top-level vpc_security_group_ids cannot be combined with it.
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [var.internal_security_group_id]
+    delete_on_termination       = true
+  }
 
   metadata_options {
     http_endpoint               = "enabled"
     http_put_response_hop_limit = 2
   }
 
-  root_block_device {
-    volume_size = 100
+  block_device_mappings {
+    device_name = data.aws_ami.this.root_device_name
+
+    ebs {
+      volume_size           = 100
+      volume_type           = "gp3"
+      encrypted             = true
+      delete_on_termination = true
+    }
   }
 
   lifecycle {
@@ -150,12 +193,15 @@ resource "aws_launch_configuration" "worker" {
 }
 
 resource "aws_autoscaling_group" "worker" {
-  name                 = "${var.project_name}_workers"
-  launch_configuration = aws_launch_configuration.worker.name
-  min_size             = var.worker_nodes_min
-  max_size             = var.worker_nodes_max
-  desired_capacity     = var.worker_nodes_min
-  vpc_zone_identifier  = var.subnets
+  name = "${var.project_name}_workers"
+  launch_template {
+    id      = aws_launch_template.worker.id
+    version = aws_launch_template.worker.latest_version
+  }
+  min_size            = var.worker_nodes_min
+  max_size            = var.worker_nodes_max
+  desired_capacity    = var.worker_nodes_min
+  vpc_zone_identifier = var.subnets
 
   lifecycle {
     ignore_changes        = [load_balancers, target_group_arns]
