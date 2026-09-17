@@ -214,18 +214,6 @@ resource "aws_autoscaling_group" "worker" {
     propagate_at_launch = true
   }
 
-  tag {
-    key                 = "k8s.io/cluster-autoscaler/${var.project_name}"
-    value               = ""
-    propagate_at_launch = true
-  }
-
-  tag {
-    key                 = "k8s.io/cluster-autoscaler/enabled"
-    value               = "true"
-    propagate_at_launch = true
-  }
-
   instance_refresh {
     strategy = "Rolling"
     preferences {

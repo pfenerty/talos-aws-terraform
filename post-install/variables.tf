@@ -23,9 +23,8 @@ variable "enables" {
       ssh_key    = string
     })
     extras = object({
-      ebs        = bool
-      linkerd    = bool
-      autoscaler = bool
+      ebs       = bool
+      karpenter = bool
     })
   })
   default = {
@@ -36,13 +35,38 @@ variable "enables" {
       ssh_key    = ""
     }
     extras = {
-      ebs        = false
-      linkerd    = false
-      autoscaler = false
+      ebs       = false
+      karpenter = false
     }
   }
 }
 variable "pod_cidr" {
   type        = string
   description = "Pod subnet CIDR"
+}
+
+variable "cluster_endpoint" {
+  type        = string
+  description = "Kubernetes API endpoint, handed to Karpenter"
+}
+
+variable "worker_instance_profile_name" {
+  type        = string
+  description = "Instance profile Karpenter launches nodes into"
+}
+
+variable "worker_iam_role_arn" {
+  type        = string
+  description = "Role behind worker_instance_profile_name, scoping Karpenter's iam:PassRole grant"
+}
+
+variable "worker_ami_id" {
+  type        = string
+  description = "Talos AMI Karpenter launches nodes from"
+}
+
+variable "karpenter_worker_machine_config" {
+  type        = string
+  description = "Talos worker machine config used as the EC2NodeClass user data"
+  sensitive   = true
 }

@@ -16,7 +16,7 @@ resource "null_resource" "prechecks" {
     }
 
     precondition {
-      condition     = !(!var.post_install.flux.enabled && (var.post_install.extras.ebs || var.post_install.extras.autoscaler || var.post_install.extras.linkerd))
+      condition     = !(!var.post_install.flux.enabled && (var.post_install.extras.ebs || var.post_install.extras.karpenter))
       error_message = "Post Install extras are enabled but Flux post install is not. The extras as designed with Flux. Enabled Flux post install if you want to use them."
     }
   }
@@ -111,6 +111,12 @@ module "post_install" {
   cilium_version   = var.cilium_version
   k8s_service_host = module.networking.load_balancer_dns
   pod_cidr         = var.pod_cidr
+
+  cluster_endpoint                = "https://${module.networking.load_balancer_dns}:443"
+  worker_instance_profile_name    = module.compute.worker_instance_profile_name
+  worker_iam_role_arn             = module.compute.worker_iam_role_arn
+  worker_ami_id                   = module.compute.talos_ami_id
+  karpenter_worker_machine_config = module.talos_config.karpenter_worker_machine_config
 
   enables = var.post_install
 }
