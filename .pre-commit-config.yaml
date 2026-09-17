@@ -1,0 +1,29 @@
+# Runs the same checks CI does, before the commit rather than after.
+#   pre-commit install
+repos:
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.99.4
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+        args: [--hook-config=--retry-once-with-cleanup=true]
+      - id: terraform_tflint
+        args: [--args=--minimum-failure-severity=warning]
+      - id: terraform_docs
+        args: [--args=--config=.terraform-docs.yml]
+      - id: terraform_checkov
+        # The hook runs per module directory, so the config path has to be
+        # anchored at the repo root rather than left relative.
+        args:
+          - --args=--config-file __GIT_WORKING_DIR__/.checkov.yaml
+          - --args=--framework terraform
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: detect-private-key

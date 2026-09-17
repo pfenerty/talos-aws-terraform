@@ -1,0 +1,28 @@
+# Per-module reference tables, injected between the markers in each module's
+# README. Regenerate with:
+#   terraform-docs -c .terraform-docs.yml <module dir>
+formatter: markdown table
+
+output:
+  file: README.md
+  mode: inject
+  template: |-
+    <!-- BEGIN_TF_DOCS -->
+    {{ .Content }}
+    <!-- END_TF_DOCS -->
+
+sort:
+  enabled: true
+  by: name
+
+settings:
+  anchor: false
+  default: true
+  description: true
+  required: true
+  type: true
+
+sections:
+  hide:
+    - header
+    - footer

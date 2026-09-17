@@ -1,5 +1,5 @@
 module "networking" {
-  source                      = "./cloud_infra/networking"
+  source                      = "./cloud-infra/networking"
   project_name                = var.project_name
   kubernetes_api_allowed_cidr = var.kubernetes_api_allowed_cidr
   talos_api_allowed_cidr      = var.talos_api_allowed_cidr
@@ -19,7 +19,7 @@ module "talos_config" {
 }
 
 module "compute" {
-  source                          = "./cloud_infra/compute"
+  source                          = "./cloud-infra/compute"
   project_name                    = var.project_name
   talos_version                   = var.talos_version
   region                          = var.region
@@ -36,6 +36,10 @@ module "compute" {
   load_balancer_target_group_arn  = module.networking.load_balancer_target_group_arn
 }
 
+# Bootstrap only has to reach one control plane node, so this takes the first.
+# public_ips and private_ips are parallel lists describing the same instances
+# in the same order, which is why both are indexed identically and why neither
+# may be sorted independently of the other.
 data "aws_instances" "control_plane_instances" {
   depends_on = [
     module.compute
@@ -43,6 +47,13 @@ data "aws_instances" "control_plane_instances" {
   filter {
     name   = "tag:aws:autoscaling:groupName"
     values = [module.compute.control_plane_autoscaling_group_name]
+  }
+
+  lifecycle {
+    postcondition {
+      condition     = length(self.public_ips) > 0 && length(self.private_ips) > 0
+      error_message = "No running instances found in the control plane autoscaling group. The group may still be launching, or its instances may be failing to start."
+    }
   }
 }
 
@@ -57,13 +68,16 @@ module "talos_bootstrap" {
   }
 }
 
+# Nothing here reports readiness, so post-install waits out a fixed delay
+# before it starts talking to the API server. Tunable because the right value
+# depends on instance type and how long the control plane takes to answer.
 resource "time_sleep" "wait_for_cluster_ready" {
   depends_on = [
     module.networking,
     module.compute,
     module.talos_bootstrap
   ]
-  create_duration = "90s"
+  create_duration = var.cluster_ready_wait
 }
 
 module "post_install" {

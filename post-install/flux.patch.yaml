@@ -4,59 +4,15 @@ resources:
   - gotk-components.yaml
   - gotk-sync.yaml
 patches:
+  # Flux has to schedule before the cloud controller has initialised any node,
+  # so every Flux deployment tolerates the uninitialized taint. `target` is
+  # what selects the deployments; the name in the patch body is required
+  # structurally by the strategic merge and is ignored.
   - patch: |
       apiVersion: apps/v1
       kind: Deployment
       metadata:
-        name: helm-controller
-      spec:
-        template:
-          spec:
-            tolerations:
-              - key: "node.cloudprovider.kubernetes.io/uninitialized"
-                operator: "Equal"
-                value: "true"
-                effect: "NoSchedule"
-    target:
-      kind: Deployment
-      labelSelector: app.kubernetes.io/part-of=flux
-  - patch: |
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: kustomize-controller
-      spec:
-        template:
-          spec:
-            tolerations:
-              - key: "node.cloudprovider.kubernetes.io/uninitialized"
-                operator: "Equal"
-                value: "true"
-                effect: "NoSchedule"
-    target:
-      kind: Deployment
-      labelSelector: app.kubernetes.io/part-of=flux
-  - patch: |
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: notification-controller
-      spec:
-        template:
-          spec:
-            tolerations:
-              - key: "node.cloudprovider.kubernetes.io/uninitialized"
-                operator: "Equal"
-                value: "true"
-                effect: "NoSchedule"
-    target:
-      kind: Deployment
-      labelSelector: app.kubernetes.io/part-of=flux
-  - patch: |
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: source-controller
+        name: selected-by-target
       spec:
         template:
           spec:

@@ -1,13 +1,16 @@
 variable "project_name" {
-  type = string
+  type        = string
+  description = "Project name, used to name Karpenter's AWS resources and as the cluster name it reports."
 }
 
 variable "aws_account_id" {
-  type = string
+  type        = string
+  description = "Account ID, scoping the controller policy's resource ARNs."
 }
 
 variable "region" {
-  type = string
+  type        = string
+  description = "AWS region Karpenter launches nodes in."
 }
 
 variable "cluster_endpoint" {

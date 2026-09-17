@@ -10,16 +10,32 @@ variable "aws_profile" {
   description = "Named profile from the shared AWS config to authenticate with. Left null, the standard credential chain is used (environment variables, SSO, instance or container role)."
 }
 
+variable "additional_tags" {
+  type        = map(string)
+  default     = {}
+  description = "Extra tags applied to every resource this module creates, on top of the cluster, ManagedBy and Project tags."
+}
+
 variable "talos_api_allowed_cidr" {
-  description = "The CIDR from which to allow to access the Talos API"
+  description = "CIDR allowed to reach the Talos API on port 50000. The default is open to the internet, which is what makes `terraform apply` work from anywhere but is the wrong setting for anything you care about: the Talos API administers the machines themselves. Narrow it to your own address."
   type        = string
   default     = "0.0.0.0/0"
+
+  validation {
+    condition     = can(cidrnetmask(var.talos_api_allowed_cidr))
+    error_message = "talos_api_allowed_cidr must be a valid IPv4 CIDR block, for example \"203.0.113.4/32\"."
+  }
 }
 
 variable "kubernetes_api_allowed_cidr" {
-  description = "The CIDR from which to allow to access the Kubernetes API"
+  description = "CIDR allowed to reach the Kubernetes API on port 6443. Open to the internet by default; narrow it to your own address where you can."
   type        = string
   default     = "0.0.0.0/0"
+
+  validation {
+    condition     = can(cidrnetmask(var.kubernetes_api_allowed_cidr))
+    error_message = "kubernetes_api_allowed_cidr must be a valid IPv4 CIDR block, for example \"203.0.113.4/32\"."
+  }
 }
 
 variable "project_name" {
@@ -93,6 +109,17 @@ variable "pod_cidr" {
   type        = string
   default     = "10.244.0.0/16"
   description = "Pod subnet CIDR. Set on the Talos machine config and reused as Cilium's strict-mode egress CIDR so the two cannot drift apart."
+}
+
+variable "cluster_ready_wait" {
+  type        = string
+  default     = "90s"
+  description = "How long to wait after bootstrap before post-install starts using the Kubernetes API. A fixed delay rather than a readiness check; raise it if post-install fails against an API server that is not answering yet."
+
+  validation {
+    condition     = can(regex("^[0-9]+(ns|us|ms|s|m|h)$", var.cluster_ready_wait))
+    error_message = "cluster_ready_wait must be a Go duration string, for example \"90s\" or \"3m\"."
+  }
 }
 
 variable "post_install" {

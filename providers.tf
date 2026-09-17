@@ -45,9 +45,14 @@ provider "aws" {
   profile = var.aws_profile
 
   default_tags {
-    tags = {
+    tags = merge({
+      # Read by the AWS cloud controller manager to find the cluster's
+      # resources; the name has to match the cluster name exactly.
       "kubernetes.io/cluster/${var.project_name}" = "owned"
-    }
+
+      ManagedBy = "terraform"
+      Project   = var.project_name
+    }, var.additional_tags)
   }
 }
 
