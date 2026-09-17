@@ -138,7 +138,8 @@ variable "hardening" {
     enabled                        = optional(bool, false)
     pod_security_enforce           = optional(string, "restricted")
     pod_security_exempt_namespaces = optional(list(string), ["kube-system"])
+    kubelet_serving_certificates   = optional(bool, false)
   })
   default     = {}
-  description = "Machine config hardening, off by default because it changes what the cluster will admit. Passed through to the Talos config module; see docs/hardening.md for what it covers, what it deliberately leaves alone, and what has to be enforced outside the machine config."
+  description = "Machine config hardening, off by default because it changes what the cluster will admit. Passed through to the Talos config module; see docs/hardening.md for what it covers, what it deliberately leaves alone, and what has to be enforced outside the machine config. kubelet_serving_certificates additionally requires a CSR approver deployed by Flux; see the doc before enabling it."
 }

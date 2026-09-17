@@ -124,9 +124,18 @@ repository or the AWS layer instead, how the config patches compose, and a
 known limitation that has no good answer yet: a machine config change does
 not reconfigure running nodes, it replaces them.
 
-It also carries a rule-by-rule coverage matrix for all 92 rules of the DISA
-Kubernetes STIG, marking each as covered here, owed by the Flux bootstrap
-repository, uncheckable as written on an immutable node, or not covered.
+`hardening.kubelet_serving_certificates` is separate and opt-in. It makes the
+kubelet bootstrap a CA-signed serving certificate instead of self-signing one,
+and the API server verify it - but it needs a kubelet-serving CSR approver
+running in the cluster, which is a Flux dependency this module cannot install.
+Enable it without one and nodes still register and run pods, while `kubectl
+logs`, `exec`, `port-forward` and metrics-server stop working until the CSRs
+are approved. Install the approver first.
+
+The doc also carries a rule-by-rule coverage matrix for all 92 rules of the
+DISA Kubernetes STIG, marking each as covered here, owed by the Flux bootstrap
+repository, uncheckable as written on an immutable node, or not covered - and
+a written disposition for the 22 uncheckable ones, aimed at an assessor.
 
 ## Node autoscaling
 
@@ -295,7 +304,7 @@ No resources.
 | config\_output\_path | Directory to write the generated kubeconfig, talosconfig and machine config files into. Null, the default, writes nothing: the same files are available as outputs, and a module that writes into the caller's directory collides with itself when instantiated more than once. The files carry cluster credentials and are written mode 0600. | `string` | `null` | no |
 | control\_plane\_node\_instance\_type | AWS EC2 instance type for control plane nodes | `string` | `"t3.medium"` | no |
 | control\_plane\_nodes | Number of control plane nodes. etcd needs an odd number to hold quorum; 1 is fine for a throwaway cluster but has no redundancy, and an instance refresh will briefly take the API server away. | `number` | `1` | no |
-| hardening | Machine config hardening, off by default because it changes what the cluster will admit. `enabled` turns on a real API server audit policy and Pod Security Admission enforcing the standard named below. It is the machine config half of a hardening baseline and not the whole of one: docs/hardening.md sets out what it covers, what Talos already does without it, and what has to be enforced in the Flux repository or the AWS layer instead. | <pre>object({<br/>    enabled                        = optional(bool, false)<br/>    pod_security_enforce           = optional(string, "restricted")<br/>    pod_security_exempt_namespaces = optional(list(string), ["kube-system"])<br/>  })</pre> | `{}` | no |
+| hardening | Machine config hardening, off by default because it changes what the cluster will admit. `enabled` turns on a real API server audit policy and Pod Security Admission enforcing the standard named below. It is the machine config half of a hardening baseline and not the whole of one: docs/hardening.md sets out what it covers, what Talos already does without it, and what has to be enforced in the Flux repository or the AWS layer instead. `kubelet_serving_certificates` makes the kubelet bootstrap a CA-signed serving certificate rather than self-signing one, and requires a CSR approver running in the cluster - a Flux dependency this module cannot install, and without which `kubectl logs` and `exec` stop working. | <pre>object({<br/>    enabled                        = optional(bool, false)<br/>    pod_security_enforce           = optional(string, "restricted")<br/>    pod_security_exempt_namespaces = optional(list(string), ["kube-system"])<br/>    kubelet_serving_certificates   = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | hubble\_ca\_validity\_hours | Lifetime of the self-signed Hubble trust anchor, in hours. The default of 12 is carried over from before this was configurable and is almost certainly too short for a CA that cert-manager issues from - raise it, or move the trust anchor to cert-manager entirely. | `number` | `12` | no |
 | kubernetes\_api\_allowed\_cidr | CIDR allowed to reach the Kubernetes API on port 6443. Open to the internet by default; narrow it to your own address where you can. | `string` | `"0.0.0.0/0"` | no |
 | kubernetes\_version | Kubernetes version | `string` | `"1.37.0"` | no |

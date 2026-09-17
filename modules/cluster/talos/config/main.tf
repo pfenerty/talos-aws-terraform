@@ -199,18 +199,54 @@ locals {
     }
   }
 
-  # There is deliberately no kubelet half to this. Everything a benchmark asks
-  # for on the node is already how Talos generates and runs it: the generated
-  # config carries defaultRuntimeSeccompProfileEnabled: true, and the kubelet
-  # is started with anonymous authentication off, webhook authn/authz,
-  # rotateCertificates, protectKernelDefaults and a 5m streaming idle timeout
-  # whatever the config says. A patch setting any of them renders byte for byte
-  # identical output, so hardening only has a control plane half.
+  # Almost everything a benchmark asks for on the node is already how Talos
+  # generates and runs it: the generated config carries
+  # defaultRuntimeSeccompProfileEnabled: true, and the kubelet is started with
+  # anonymous authentication off, webhook authn/authz, rotateCertificates,
+  # protectKernelDefaults and a 5m streaming idle timeout whatever the config
+  # says. Patches setting any of them render byte for byte identical output.
   #
-  # serverTLSBootstrap is the one real remaining delta and is left off on
-  # purpose: it needs something in the cluster approving kubelet serving CSRs,
-  # and without an approver the node's serving certificate never issues. See
-  # docs/hardening.md.
+  # The one real exception is the kubelet's serving certificate, which is why
+  # the two patches below exist and why they are behind their own variable
+  # rather than hardening.enabled.
+  #
+  # Left alone, the kubelet self-signs its serving certificate and the API
+  # server does not check it. serverTLSBootstrap makes the kubelet request one
+  # from the cluster CA instead, and kubelet-certificate-authority makes the
+  # API server verify what it is given - each is pointless without the other,
+  # so they are set together.
+  #
+  # Both depend on something outside this repository. kube-controller-manager
+  # will not auto-approve kubernetes.io/kubelet-serving CSRs, by design: it
+  # cannot tell whether the SANs a node asks for are really that node's. Until
+  # an approver is running in the cluster the CSRs stay pending, and a kubelet
+  # with no serving certificate still registers its node and still runs pods -
+  # what breaks is anything the API server opens a connection *to* the kubelet
+  # for, so `kubectl logs`, `exec`, `port-forward` and metrics-server. The
+  # approver is a Flux dependency, named in docs/hardening.md.
+  hardening_kubelet_serving_patch = {
+    machine = {
+      kubelet = {
+        extraConfig = {
+          serverTLSBootstrap = true
+        }
+      }
+    }
+  }
+
+  # Merges into the extraArgs set by control_plane_patch: maps merge key by
+  # key, so this adds a flag rather than replacing cloud-provider. The path is
+  # the API server static pod's own copy of the cluster CA, which Talos already
+  # mounts and passes as client-ca-file.
+  hardening_kubelet_serving_control_plane_patch = {
+    cluster = {
+      apiServer = {
+        extraArgs = {
+          kubelet-certificate-authority = "/system/secrets/kubernetes/kube-apiserver/ca.crt"
+        }
+      }
+    }
+  }
 
   # Encoded here rather than where they are consumed: the patches are objects
   # of different shapes, and a conditional whose arms are lists of them has no
@@ -224,12 +260,28 @@ locals {
     yamlencode(local.hardening_control_plane_patch),
   ] : []
 
+  # Applied to every role, control plane included: the control plane nodes run
+  # kubelets too, and `kubectl logs` against a control plane node goes through
+  # the same serving certificate.
+  kubelet_serving_patches = var.hardening.kubelet_serving_certificates ? [
+    yamlencode(local.hardening_kubelet_serving_patch),
+  ] : []
+
+  kubelet_serving_control_plane_patches = var.hardening.kubelet_serving_certificates ? [
+    yamlencode(local.hardening_kubelet_serving_control_plane_patch),
+  ] : []
+
   control_plane_patches = concat(
     [yamlencode(local.cluster_patch), yamlencode(local.control_plane_patch)],
     local.hardening_control_plane_patches,
+    local.kubelet_serving_patches,
+    local.kubelet_serving_control_plane_patches,
   )
 
-  worker_patches = [yamlencode(local.cluster_patch)]
+  worker_patches = concat(
+    [yamlencode(local.cluster_patch)],
+    local.kubelet_serving_patches,
+  )
 
   karpenter_worker_patches = concat(
     local.worker_patches,
