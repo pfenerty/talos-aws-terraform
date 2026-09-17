@@ -17,6 +17,12 @@ resource "aws_subnet" "this" {
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   cidr_block = cidrsubnet(aws_vpc.this.cidr_block, 8, count.index)
+
+  # Karpenter picks the subnets it launches into by tag. The tag is inert when
+  # Karpenter is not installed, so it is not gated on the post-install flag.
+  tags = {
+    "karpenter.sh/discovery" = var.project_name
+  }
 }
 
 resource "aws_internet_gateway" "this" {
@@ -32,6 +38,13 @@ resource "aws_route" "internet_gateway" {
 resource "aws_security_group" "internal" {
   name   = "${var.project_name}_internal"
   vpc_id = aws_vpc.this.id
+
+  # Same discovery tag as the subnets: this is the security group Karpenter
+  # attaches to the nodes it launches, and it is what lets them reach the
+  # control plane.
+  tags = {
+    "karpenter.sh/discovery" = var.project_name
+  }
 
   egress {
     from_port        = 0

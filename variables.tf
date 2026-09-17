@@ -37,13 +37,13 @@ variable "control_plane_node_instance_type" {
 variable "worker_nodes_min" {
   type        = number
   default     = 1
-  description = "Minimum number of worker nodes for the autoscaling group"
+  description = "Size the worker autoscaling group is created at. Nothing scales this group: it is the static baseline that Karpenter itself and the rest of the cluster add-ons run on, and Karpenter provisions everything above it."
 }
 
 variable "worker_nodes_max" {
   type        = number
   default     = 5
-  description = "Maximum number of worker nodes for the autoscaling group"
+  description = "Ceiling on the worker autoscaling group. Only reached by scaling the group by hand; elastic capacity comes from Karpenter instead."
 }
 
 variable "worker_node_instance_type" {
@@ -88,9 +88,8 @@ variable "post_install" {
       ssh_key    = string
     })
     extras = object({
-      ebs        = bool
-      linkerd    = bool
-      autoscaler = bool
+      ebs       = bool
+      karpenter = bool
     })
   })
   default = {
@@ -101,9 +100,8 @@ variable "post_install" {
       ssh_key    = ""
     }
     extras = {
-      ebs        = false
-      linkerd    = false
-      autoscaler = false
+      ebs       = false
+      karpenter = false
     }
   }
 }

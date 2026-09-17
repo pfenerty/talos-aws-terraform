@@ -24,20 +24,19 @@ module "ebs" {
   aws_account_id = data.aws_caller_identity.current.account_id
 }
 
-module "linkerd" {
-  count  = var.enables.extras.linkerd ? 1 : 0
-  source = "./linkerd"
-
-  depends_on = [flux_bootstrap_git.this]
-}
-
-module "autoscaler" {
-  count  = var.enables.extras.autoscaler ? 1 : 0
-  source = "./autoscaler"
+module "karpenter" {
+  count  = var.enables.extras.karpenter ? 1 : 0
+  source = "./karpenter"
 
   project_name   = var.project_name
   aws_account_id = data.aws_caller_identity.current.account_id
   region         = var.region
+
+  cluster_endpoint           = var.cluster_endpoint
+  node_instance_profile_name = var.worker_instance_profile_name
+  node_iam_role_arn          = var.worker_iam_role_arn
+  node_ami_id                = var.worker_ami_id
+  node_user_data             = var.karpenter_worker_machine_config
 
   depends_on = [flux_bootstrap_git.this]
 }
