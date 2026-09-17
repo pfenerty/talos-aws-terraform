@@ -36,6 +36,7 @@ module "talos_config" {
   load_balancer_dns  = module.networking.load_balancer_dns
   kubernetes_version = var.kubernetes_version
   talos_version      = var.talos_version
+  pod_cidr           = var.pod_cidr
 
   providers = {
     talos = talos
@@ -109,6 +110,7 @@ module "post_install" {
 
   cilium_version   = var.cilium_version
   k8s_service_host = module.networking.load_balancer_dns
+  pod_cidr         = var.pod_cidr
 
   enables = var.post_install
 }

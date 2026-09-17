@@ -5,6 +5,7 @@ locals {
         cni = {
           name = "none"
         }
+        podSubnets = [var.pod_cidr]
       }
       proxy = {
         disabled = true

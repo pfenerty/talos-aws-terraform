@@ -54,20 +54,26 @@ variable "worker_node_instance_type" {
 
 variable "talos_version" {
   type        = string
-  default     = "v1.7.6"
+  default     = "v1.14.1"
   description = "Talos Linux version"
 }
 
 variable "kubernetes_version" {
   type        = string
-  default     = "1.30.5"
+  default     = "1.37.0"
   description = "Kubernetes version"
 }
 
 variable "cilium_version" {
   type        = string
-  default     = "1.16.1"
+  default     = "1.20.2"
   description = "Version of Cilium to deploy"
+}
+
+variable "pod_cidr" {
+  type        = string
+  default     = "10.244.0.0/16"
+  description = "Pod subnet CIDR. Set on the Talos machine config and reused as Cilium's strict-mode egress CIDR so the two cannot drift apart."
 }
 
 variable "post_install" {
