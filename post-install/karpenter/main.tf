@@ -71,7 +71,20 @@ locals {
 resource "aws_cloudwatch_event_rule" "interruption" {
   for_each = local.interruption_events
 
-  name = "${var.project_name}-karpenter-${each.key}"
+  # The event keys are HCL identifiers, so they are snake_case; the rule names
+  # they end up in are not, hence the replace.
+  name = "${var.project_name}-karpenter-${replace(each.key, "_", "-")}"
+
+  lifecycle {
+    # EventBridge caps rule names at 64 characters and the longest key here
+    # spends 44 of them, so a project_name the load balancer would accept can
+    # still overflow this. Only reached when Karpenter is enabled, which is the
+    # only time this module is instantiated.
+    precondition {
+      condition     = length("${var.project_name}-karpenter-${replace(each.key, "_", "-")}") <= 64
+      error_message = "project_name is too long for the Karpenter interruption rule names: EventBridge allows 64 characters and the longest of these needs 44 on top of project_name, leaving 20."
+    }
+  }
 
   event_pattern = jsonencode({
     source        = [each.value.source]
@@ -89,11 +102,11 @@ resource "aws_cloudwatch_event_target" "interruption" {
 # There is no OIDC provider in front of this cluster, so the controller
 # authenticates with a static key pair the same way the other extras do.
 resource "aws_iam_user" "this" {
-  name = "${var.project_name}_karpenter"
+  name = "${var.project_name}-karpenter"
 }
 
 resource "aws_iam_policy" "this" {
-  name = "${var.project_name}_karpenter"
+  name = "${var.project_name}-karpenter"
   policy = templatefile("${path.module}/iam.json.tmpl", {
     partition     = data.aws_partition.current.partition,
     region        = var.region,

@@ -38,7 +38,7 @@ resource "aws_iam_instance_profile" "control_plane" {
 }
 
 resource "aws_launch_template" "control_plane" {
-  name_prefix   = "${var.project_name}_control_plane"
+  name_prefix   = "${var.project_name}-control-plane"
   image_id      = data.aws_ami.this.id
   instance_type = var.control_plane_instance_type
 
@@ -85,7 +85,7 @@ resource "aws_launch_template" "control_plane" {
 }
 
 resource "aws_autoscaling_group" "control_plane" {
-  name = "${var.project_name}_control_plane"
+  name = "${var.project_name}-control-plane"
   launch_template {
     id      = aws_launch_template.control_plane.id
     version = aws_launch_template.control_plane.latest_version
@@ -158,7 +158,7 @@ resource "aws_iam_instance_profile" "worker" {
 }
 
 resource "aws_launch_template" "worker" {
-  name_prefix   = "${var.project_name}_worker"
+  name_prefix   = "${var.project_name}-worker"
   image_id      = data.aws_ami.this.id
   instance_type = var.worker_instance_type
 
@@ -205,7 +205,7 @@ resource "aws_launch_template" "worker" {
 }
 
 resource "aws_autoscaling_group" "worker" {
-  name = "${var.project_name}_workers"
+  name = "${var.project_name}-workers"
   launch_template {
     id      = aws_launch_template.worker.id
     version = aws_launch_template.worker.latest_version

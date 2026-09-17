@@ -1,9 +1,9 @@
 resource "aws_iam_user" "ebs" {
-  name = "${var.project_name}_ebs_svc"
+  name = "${var.project_name}-ebs-svc"
 }
 
 resource "aws_iam_policy" "ebs" {
-  name = "${var.project_name}_ebs"
+  name = "${var.project_name}-ebs"
   policy = templatefile("${path.module}/ebs-iam.json.tmpl", {
     account_id   = var.aws_account_id,
     project_name = var.project_name

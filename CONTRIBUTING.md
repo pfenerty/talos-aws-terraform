@@ -41,6 +41,10 @@ as those are.
   `ingress`/`egress` blocks: mixing the two makes Terraform fight itself.
 * A checkov finding is either fixed or added to `.checkov.yaml` with a comment
   saying why it does not apply. Do not leave it failing.
-* AWS resource names are historically inconsistent about separators
-  (`<project>_internal` against `<project>-control-plane`). Renaming one
-  replaces the resource, so they have been left alone.
+* AWS resource names are kebab-case and prefixed with `project_name`
+  (`<project>-internal`, `<project>-control-plane`). Renaming one replaces the
+  resource, so get it right the first time.
+* `project_name` is used verbatim as the load balancer and target group name,
+  which AWS limits to 32 characters of alphanumerics and hyphens. That is what
+  the validations on it are enforcing; do not loosen them without checking what
+  still consumes the name.
