@@ -33,10 +33,13 @@ override.tf.json
 .terraformrc
 terraform.rc
 
-# Generated config files
+# Generated config files. These carry cluster secrets (machine configs contain
+# the cluster CA key and bootstrap token), so every filename written by a
+# local_sensitive_file resource must be listed here.
 kubeconfig
 talosconfig
 worker.yaml
 control-plane.yaml
+karpenter-worker.yaml
 
 .DS_Store

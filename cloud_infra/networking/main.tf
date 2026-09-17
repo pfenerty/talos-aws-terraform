@@ -4,7 +4,7 @@ data "aws_availability_zones" "available" {
 
 resource "aws_vpc" "this" {
   tags = {
-    Name = "${var.project_name}"
+    Name = var.project_name
   }
 
   cidr_block = var.vpc_cidr
@@ -85,7 +85,7 @@ resource "aws_lb" "this" {
   name               = var.project_name
   internal           = false
   load_balancer_type = "network"
-  subnets            = aws_subnet.this.*.id
+  subnets            = aws_subnet.this[*].id
 }
 
 resource "aws_lb_target_group" "this" {

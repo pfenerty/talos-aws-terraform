@@ -27,6 +27,7 @@ variable "enables" {
       karpenter = bool
     })
   })
+  sensitive = true
   default = {
     flux = {
       enabled    = false

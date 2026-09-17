@@ -1,31 +1,6 @@
-resource "null_resource" "prechecks" {
-  lifecycle {
-    precondition {
-      condition     = !(var.post_install.flux.enabled && var.post_install.flux.git_url == "")
-      error_message = "If Flux post install is enabled, you must provide a git url to bootstrap flux"
-    }
-
-    precondition {
-      condition     = !(var.post_install.flux.enabled && var.post_install.flux.git_branch == "")
-      error_message = "If Flux post install is enabled, you must provide a git branch to bootstrap flux"
-    }
-
-    precondition {
-      condition     = !(var.post_install.flux.enabled && var.post_install.flux.ssh_key == "")
-      error_message = "If Flux post install is enabled, you must provide a git ssh key to bootstrap flux"
-    }
-
-    precondition {
-      condition     = !(!var.post_install.flux.enabled && (var.post_install.extras.ebs || var.post_install.extras.karpenter))
-      error_message = "Post Install extras are enabled but Flux post install is not. The extras as designed with Flux. Enabled Flux post install if you want to use them."
-    }
-  }
-}
-
 module "networking" {
   source                      = "./cloud_infra/networking"
   project_name                = var.project_name
-  region                      = var.region
   kubernetes_api_allowed_cidr = var.kubernetes_api_allowed_cidr
   talos_api_allowed_cidr      = var.talos_api_allowed_cidr
 }
