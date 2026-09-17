@@ -62,6 +62,7 @@ No modules.
 |------|-------------|
 | control\_plane\_autoscaling\_group\_name | n/a |
 | talos\_ami\_id | n/a |
+| worker\_autoscaling\_group\_name | n/a |
 | worker\_iam\_role\_arn | n/a |
 | worker\_instance\_profile\_name | Karpenter launches nodes into the worker role's instance profile rather than creating one of its own, which keeps the instance-profile write permissions out of the controller's policy. |
 <!-- END_TF_DOCS -->

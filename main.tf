@@ -57,6 +57,16 @@ data "aws_instances" "control_plane_instances" {
   }
 }
 
+data "aws_instances" "worker_instances" {
+  depends_on = [
+    module.compute
+  ]
+  filter {
+    name   = "tag:aws:autoscaling:groupName"
+    values = [module.compute.worker_autoscaling_group_name]
+  }
+}
+
 module "talos_bootstrap" {
   source               = "./talos/bootstrap"
   client_configuration = module.talos_config.client_configuration
@@ -68,16 +78,28 @@ module "talos_bootstrap" {
   }
 }
 
-# Nothing here reports readiness, so post-install waits out a fixed delay
-# before it starts talking to the API server. Tunable because the right value
-# depends on instance type and how long the control plane takes to answer.
-resource "time_sleep" "wait_for_cluster_ready" {
+# Blocks until the cluster reports healthy - etcd quorum, kubelet up on every
+# node, control plane components live - rather than waiting out a fixed delay
+# and hoping. This is the Talos provider's own readiness check, so it knows
+# what healthy means; a timer did not.
+data "talos_cluster_health" "this" {
   depends_on = [
     module.networking,
     module.compute,
     module.talos_bootstrap
   ]
-  create_duration = var.cluster_ready_wait
+
+  client_configuration = module.talos_config.client_configuration
+  control_plane_nodes  = data.aws_instances.control_plane_instances.private_ips
+  worker_nodes         = data.aws_instances.worker_instances.private_ips
+
+  # Node addresses are private, so the client reaches them through a control
+  # plane node's public address.
+  endpoints = data.aws_instances.control_plane_instances.public_ips
+
+  timeouts = {
+    read = var.cluster_health_timeout
+  }
 }
 
 module "post_install" {
@@ -87,7 +109,7 @@ module "post_install" {
     module.networking,
     module.compute,
     module.talos_bootstrap,
-    time_sleep.wait_for_cluster_ready
+    data.talos_cluster_health.this
   ]
 
   providers = {

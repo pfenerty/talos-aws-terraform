@@ -125,14 +125,14 @@ variable "pod_cidr" {
   description = "Pod subnet CIDR. Set on the Talos machine config and reused as Cilium's strict-mode egress CIDR so the two cannot drift apart."
 }
 
-variable "cluster_ready_wait" {
+variable "cluster_health_timeout" {
   type        = string
-  default     = "90s"
-  description = "How long to wait after bootstrap before post-install starts using the Kubernetes API. A fixed delay rather than a readiness check; raise it if post-install fails against an API server that is not answering yet."
+  default     = "10m"
+  description = "How long to wait for the cluster to report healthy before giving up. This is a ceiling, not a delay: the check returns as soon as the cluster is ready. Terraform re-reads the health check on refresh, so this also bounds how long a plan blocks when the cluster is unreachable."
 
   validation {
-    condition     = can(regex("^[0-9]+(ns|us|ms|s|m|h)$", var.cluster_ready_wait))
-    error_message = "cluster_ready_wait must be a Go duration string, for example \"90s\" or \"3m\"."
+    condition     = can(regex("^[0-9]+(s|m|h)$", var.cluster_health_timeout))
+    error_message = "cluster_health_timeout must be a duration of seconds, minutes or hours, for example \"10m\" or \"600s\"."
   }
 }
 

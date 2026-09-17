@@ -30,10 +30,6 @@ terraform {
       source  = "hashicorp/tls"
       version = "4.4.1"
     }
-    time = {
-      source  = "hashicorp/time"
-      version = "0.14.2"
-    }
   }
 }
 
