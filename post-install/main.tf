@@ -1,7 +1,7 @@
 module "cilium" {
-  source           = "./cilium"
-  cilium_version   = var.cilium_version
-  k8s_service_host = var.k8s_service_host
+  source         = "./cilium"
+  cilium_version = var.cilium_version
+  pod_cidr       = var.pod_cidr
 }
 
 resource "random_uuid" "cluster_flux_id" {}

@@ -42,3 +42,7 @@ variable "enables" {
     }
   }
 }
+variable "pod_cidr" {
+  type        = string
+  description = "Pod subnet CIDR"
+}

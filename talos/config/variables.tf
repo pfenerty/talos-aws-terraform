@@ -13,3 +13,7 @@ variable "kubernetes_version" {
 variable "load_balancer_dns" {
   type = string
 }
+variable "pod_cidr" {
+  type        = string
+  description = "Pod subnet CIDR"
+}

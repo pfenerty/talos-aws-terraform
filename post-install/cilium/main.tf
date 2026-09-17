@@ -10,6 +10,11 @@ resource "helm_release" "cilium" {
       name  = "ipam.mode"
       value = "kubernetes"
     },
+    # These two lists are the chart defaults minus SYS_MODULE: Talos is
+    # immutable and does not permit loading kernel modules, so granting it
+    # is pointless. Re-check them against the chart's values.yaml on every
+    # Cilium bump, since the defaults do gain entries (1.20 added SYSLOG to
+    # ciliumAgent, deliberately not adopted here).
     {
       name  = "securityContext.capabilities.ciliumAgent"
       value = "{CHOWN,KILL,NET_ADMIN,NET_RAW,IPC_LOCK,SYS_ADMIN,SYS_RESOURCE,DAC_OVERRIDE,FOWNER,SETGID,SETUID}"
@@ -46,9 +51,17 @@ resource "helm_release" "cilium" {
       name  = "encryption.type"
       value = "wireguard"
     },
+    # Cilium 1.20 replaced encryption.strictMode.enabled with separate
+    # egress/ingress sub-keys. helm --set on a path the chart no longer
+    # knows is silently accepted, so the old key would have quietly stopped
+    # enforcing strict encryption.
     {
-      name  = "encryption.strictMode.enabled"
+      name  = "encryption.strictMode.egress.enabled"
       value = "true"
+    },
+    {
+      name  = "encryption.strictMode.egress.cidr"
+      value = var.pod_cidr
     },
   ]
 }
