@@ -1,0 +1,23 @@
+# Checks that are deliberately not applicable to this cluster. Everything not
+# listed here is a finding we intend to fix; see the CI job, which runs in
+# soft-fail mode until the remaining infrastructure-level findings are closed.
+skip-check:
+  # Nodes need public IPs: there is no NAT gateway in this VPC, and the Talos
+  # API and Kubernetes API are reached directly over the internet.
+  - CKV_AWS_88
+  # Hop limit 2 is required for pods to reach IMDS through the host network.
+  - CKV_AWS_341
+  # Flow logs, load balancer access logs and deletion protection are cost and
+  # ceremony this cluster does not need.
+  - CKV2_AWS_11
+  - CKV_AWS_91
+  - CKV_AWS_150
+  # There is no OIDC provider in front of this cluster, so the EBS CSI driver
+  # and Karpenter authenticate with IAM users and static keys. Replacing these
+  # with IRSA roles is tracked separately.
+  - CKV_AWS_273
+  - CKV_AWS_40
+  # The internal security group is intentionally allow-all egress: it is the
+  # group every node sits in, and Talos needs to reach the internet to pull
+  # images.
+  - CKV_AWS_382

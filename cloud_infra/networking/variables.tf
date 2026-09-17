@@ -2,10 +2,6 @@ variable "project_name" {
   type = string
 }
 
-variable "region" {
-  type = string
-}
-
 variable "vpc_cidr" {
   description = "The IPv4 CIDR block for the VPC."
   type        = string

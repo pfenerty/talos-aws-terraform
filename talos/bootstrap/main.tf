@@ -14,7 +14,7 @@ resource "talos_cluster_kubeconfig" "kubeconfig" {
   ]
 }
 
-resource "local_file" "kubeconfig" {
+resource "local_sensitive_file" "kubeconfig" {
   content  = talos_cluster_kubeconfig.kubeconfig.kubeconfig_raw
   filename = "kubeconfig"
 }

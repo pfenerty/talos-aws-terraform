@@ -4,6 +4,7 @@ variable "client_configuration" {
     client_certificate = string
     client_key         = string
   })
+  sensitive = true
 }
 
 variable "public_ip" {

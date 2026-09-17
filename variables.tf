@@ -104,4 +104,26 @@ variable "post_install" {
       karpenter = false
     }
   }
+  sensitive   = true
+  description = "What to install once the cluster is up. Flux bootstraps from the git repository described here; the extras are Terraform-managed AWS resources that the Flux bootstrap repository consumes, so they require Flux."
+
+  validation {
+    condition     = !(var.post_install.flux.enabled && var.post_install.flux.git_url == "")
+    error_message = "If Flux post install is enabled, you must provide a git url to bootstrap flux."
+  }
+
+  validation {
+    condition     = !(var.post_install.flux.enabled && var.post_install.flux.git_branch == "")
+    error_message = "If Flux post install is enabled, you must provide a git branch to bootstrap flux."
+  }
+
+  validation {
+    condition     = !(var.post_install.flux.enabled && var.post_install.flux.ssh_key == "")
+    error_message = "If Flux post install is enabled, you must provide a git ssh key to bootstrap flux."
+  }
+
+  validation {
+    condition     = !(!var.post_install.flux.enabled && (var.post_install.extras.ebs || var.post_install.extras.karpenter))
+    error_message = "Post install extras are enabled but Flux post install is not. The extras are designed for Flux; enable Flux post install if you want to use them."
+  }
 }

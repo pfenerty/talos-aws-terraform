@@ -15,7 +15,7 @@ output "availability_zones" {
 }
 
 output "public_subnets" {
-  value = aws_subnet.this.*.id
+  value = aws_subnet.this[*].id
 }
 
 output "control_plane_security_group_id" {

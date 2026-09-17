@@ -35,11 +35,13 @@ variable "worker_nodes_max" {
 }
 
 variable "control_plane_machine_config" {
-  type = string
+  type      = string
+  sensitive = true
 }
 
 variable "worker_machine_config" {
-  type = string
+  type      = string
+  sensitive = true
 }
 
 variable "control_plane_security_group_id" {

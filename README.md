@@ -74,3 +74,24 @@ substitution is a plain string replace and would break the YAML indentation.
 When Terraform has completed, there will be a `kubeconfig` and `talosconfig` file in your working directory; after about a minute after completion you should have a functional cluster
 
 See `variables.tf` for available variables and descriptions
+
+## Development
+
+CI runs the following on every pull request; all four are worth running locally
+before pushing:
+
+```sh
+terraform fmt -check -recursive -diff
+terraform init -backend=false      # no state or AWS credentials needed
+terraform validate
+tflint --recursive
+checkov -d . --config-file .checkov.yaml --framework terraform
+```
+
+`.checkov.yaml` lists the checks that do not apply to this cluster, each with
+the reason. The checkov job is soft-fail while the remaining infrastructure
+findings are open; the other three block.
+
+The generated `kubeconfig`, `talosconfig` and machine config files contain
+cluster secrets. They are written by `local_sensitive_file` (mode 0600) and are
+listed in `.gitignore` - anything new written there needs adding to both.

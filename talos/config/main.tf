@@ -66,7 +66,7 @@ data "talos_client_configuration" "talosconfig" {
   endpoints            = ["https://${var.load_balancer_dns}:443"]
 }
 
-resource "local_file" "talosconfig" {
+resource "local_sensitive_file" "talosconfig" {
   content  = data.talos_client_configuration.talosconfig.talos_config
   filename = "talosconfig"
 }
@@ -85,7 +85,7 @@ data "talos_machine_configuration" "machineconfig_cp" {
   ]
 }
 
-resource "local_file" "machineconfig_cp" {
+resource "local_sensitive_file" "machineconfig_cp" {
   content  = data.talos_machine_configuration.machineconfig_cp.machine_configuration
   filename = "control-plane.yaml"
 }
@@ -104,7 +104,7 @@ data "talos_machine_configuration" "machineconfig_worker" {
   ]
 }
 
-resource "local_file" "machineconfig_worker" {
+resource "local_sensitive_file" "machineconfig_worker" {
   content  = data.talos_machine_configuration.machineconfig_worker.machine_configuration
   filename = "worker.yaml"
 }
@@ -123,7 +123,7 @@ data "talos_machine_configuration" "machineconfig_karpenter_worker" {
   ]
 }
 
-resource "local_file" "machineconfig_karpenter_worker" {
+resource "local_sensitive_file" "machineconfig_karpenter_worker" {
   content  = data.talos_machine_configuration.machineconfig_karpenter_worker.machine_configuration
   filename = "karpenter-worker.yaml"
 }
