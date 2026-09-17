@@ -27,10 +27,6 @@ terraform {
       source  = "fluxcd/flux"
       version = "~> 1.9"
     }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.9"
-    }
     tls = {
       source  = "hashicorp/tls"
       version = "~> 4.4"

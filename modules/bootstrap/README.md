@@ -44,9 +44,16 @@ publishes the values that repository reads:
 | Secret | Namespace | Written when |
 |--------|-----------|--------------|
 | `cilium-config` | `flux-system` | Flux enabled. Carries `pod-cidr`, which the Cilium HelmRelease needs as its strict-mode egress CIDR - it must match the pod CIDR the machine configs were generated with. |
-| `karpenter-config` | `flux-system` | `extras.karpenter` |
+| `karpenter-config` | `flux-system` | `extras.karpenter`. Read by `valuesFrom`, which resolves secrets in the HelmRelease's namespace. |
+| `karpenter-aws-credentials` | `kube-system` | `extras.karpenter`. The same key pair again, shaped as environment variables, because the chart takes credentials only through `controller.envFrom` - which resolves in the pod's namespace, not the HelmRelease's. |
 | `aws-secret` | `kube-system` | `extras.ebs` |
-| `aws-loadbalancer-config` | `flux-system` | Flux enabled |
+| `aws-loadbalancer-config` | `flux-system` | Flux enabled. Nothing in the bootstrap repository reads it today. |
+
+Flux syncs `clusters/<project_name>`, and `flux_bootstrap_git` writes only
+`flux-system` inside it. The Kustomizations that describe what the cluster runs
+are committed to that directory beforehand, which is why the path is the
+project name rather than something generated: a path that is not known until
+after the apply cannot be populated before it.
 
 `flux.patch.yaml` patches every Flux Deployment to tolerate
 `node.cloudprovider.kubernetes.io/uninitialized`. This is load-bearing: with
@@ -64,7 +71,6 @@ Flux. Remove the patch and every Flux pod stays Pending forever.
 | flux | ~> 1.9 |
 | helm | ~> 3.3 |
 | kubernetes | ~> 3.2 |
-| random | ~> 3.9 |
 | talos | ~> 0.11 |
 | tls | ~> 4.4 |
 
@@ -75,7 +81,6 @@ Flux. Remove the patch and every Flux pod stays Pending forever.
 | aws | ~> 6.65 |
 | flux | ~> 1.9 |
 | kubernetes | ~> 3.2 |
-| random | ~> 3.9 |
 | talos | ~> 0.11 |
 
 ## Modules
@@ -93,7 +98,6 @@ Flux. Remove the patch and every Flux pod stays Pending forever.
 | [flux_bootstrap_git.this](https://registry.terraform.io/providers/fluxcd/flux/latest/docs/resources/bootstrap_git) | resource |
 | [kubernetes_secret_v1.aws_lb_config](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/secret_v1) | resource |
 | [kubernetes_secret_v1.cilium_config](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/secret_v1) | resource |
-| [random_uuid.cluster_flux_id](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/uuid) | resource |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [talos_cluster_health.this](https://registry.terraform.io/providers/siderolabs/talos/latest/docs/data-sources/cluster_health) | data source |
 
