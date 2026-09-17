@@ -60,7 +60,11 @@ resource "aws_launch_template" "control_plane" {
   }
 
   metadata_options {
-    http_endpoint               = "enabled"
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+
+    # 2, not 1: the kubelet and the cloud controller reach IMDS from the host
+    # network, which is one hop further than the instance itself.
     http_put_response_hop_limit = 2
   }
 
@@ -86,8 +90,11 @@ resource "aws_autoscaling_group" "control_plane" {
     id      = aws_launch_template.control_plane.id
     version = aws_launch_template.control_plane.latest_version
   }
-  min_size            = var.control_plane_nodes
-  max_size            = var.control_plane_nodes
+  min_size = var.control_plane_nodes
+
+  # One above desired so an instance refresh has somewhere to put the
+  # replacement before it takes the old node away.
+  max_size            = var.control_plane_nodes + 1
   desired_capacity    = var.control_plane_nodes
   vpc_zone_identifier = var.subnets
 
@@ -105,7 +112,8 @@ resource "aws_autoscaling_group" "control_plane" {
   instance_refresh {
     strategy = "Rolling"
     preferences {
-      min_healthy_percentage = 50
+      min_healthy_percentage = 100
+      max_healthy_percentage = 200
     }
   }
 }
@@ -172,7 +180,11 @@ resource "aws_launch_template" "worker" {
   }
 
   metadata_options {
-    http_endpoint               = "enabled"
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+
+    # 2, not 1: the kubelet and the cloud controller reach IMDS from the host
+    # network, which is one hop further than the instance itself.
     http_put_response_hop_limit = 2
   }
 
@@ -217,7 +229,8 @@ resource "aws_autoscaling_group" "worker" {
   instance_refresh {
     strategy = "Rolling"
     preferences {
-      min_healthy_percentage = 30
+      min_healthy_percentage = 100
+      max_healthy_percentage = 200
     }
   }
 }

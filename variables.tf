@@ -4,6 +4,12 @@ variable "region" {
   description = "AWS region to create infastructure in"
 }
 
+variable "aws_profile" {
+  type        = string
+  default     = null
+  description = "Named profile from the shared AWS config to authenticate with. Left null, the standard credential chain is used (environment variables, SSO, instance or container role)."
+}
+
 variable "talos_api_allowed_cidr" {
   description = "The CIDR from which to allow to access the Talos API"
   type        = string
@@ -25,7 +31,12 @@ variable "project_name" {
 variable "control_plane_nodes" {
   type        = number
   default     = 1
-  description = "Number of control plane nodes"
+  description = "Number of control plane nodes. etcd needs an odd number to hold quorum; 1 is fine for a throwaway cluster but has no redundancy, and an instance refresh will briefly take the API server away."
+
+  validation {
+    condition     = var.control_plane_nodes > 0 && var.control_plane_nodes % 2 == 1
+    error_message = "control_plane_nodes must be a positive odd number, so that etcd can form a quorum."
+  }
 }
 
 variable "control_plane_node_instance_type" {
@@ -43,7 +54,12 @@ variable "worker_nodes_min" {
 variable "worker_nodes_max" {
   type        = number
   default     = 5
-  description = "Ceiling on the worker autoscaling group. Only reached by scaling the group by hand; elastic capacity comes from Karpenter instead."
+  description = "Ceiling on the worker autoscaling group. Only reached by scaling the group by hand; elastic capacity comes from Karpenter instead. Must leave at least one instance of headroom above worker_nodes_min, which is what a rolling instance refresh launches its replacement into."
+
+  validation {
+    condition     = var.worker_nodes_max > var.worker_nodes_min
+    error_message = "worker_nodes_max must be greater than worker_nodes_min: an instance refresh launches a replacement before terminating a node, and needs one instance of headroom to do it."
+  }
 }
 
 variable "worker_node_instance_type" {

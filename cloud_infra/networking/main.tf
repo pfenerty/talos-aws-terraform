@@ -2,6 +2,23 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+locals {
+  # Pinning availability_zones is strongly recommended. Left unset, the subnet
+  # layout is derived from whatever AWS currently reports for the region, so
+  # AWS adding an Availability Zone silently changes it.
+  availability_zones = var.availability_zones != null ? var.availability_zones : data.aws_availability_zones.available.names
+
+  # Keyed by Availability Zone rather than by position. With count, the list
+  # index was the resource address, so an AZ appearing or disappearing shifted
+  # every subnet after it and Terraform would destroy and recreate them - and
+  # the cluster with them.
+  subnet_cidrs = { for index, zone in local.availability_zones : zone => cidrsubnet(var.vpc_cidr, 8, index) }
+
+  # Ordered by zone rather than by map key so that the list handed to the load
+  # balancer and the compute module does not reorder between plans.
+  subnet_ids = [for zone in local.availability_zones : aws_subnet.this[zone].id]
+}
+
 resource "aws_vpc" "this" {
   tags = {
     Name = var.project_name
@@ -11,17 +28,29 @@ resource "aws_vpc" "this" {
 }
 
 resource "aws_subnet" "this" {
-  count = length(data.aws_availability_zones.available.names)
+  for_each = local.subnet_cidrs
 
   vpc_id            = aws_vpc.this.id
-  availability_zone = data.aws_availability_zones.available.names[count.index]
+  availability_zone = each.key
 
-  cidr_block = cidrsubnet(aws_vpc.this.cidr_block, 8, count.index)
+  cidr_block = each.value
 
   # Karpenter picks the subnets it launches into by tag. The tag is inert when
   # Karpenter is not installed, so it is not gated on the post-install flag.
   tags = {
+    Name                     = "${var.project_name}-${each.key}"
     "karpenter.sh/discovery" = var.project_name
+  }
+}
+
+# AWS creates a default security group per VPC that allows all traffic between
+# anything assigned to it. Nothing here uses it, but it exists and is
+# attachable, so it is adopted with no rules rather than left open.
+resource "aws_default_security_group" "this" {
+  vpc_id = aws_vpc.this.id
+
+  tags = {
+    Name = "${var.project_name}-default-unused"
   }
 }
 
@@ -35,9 +64,15 @@ resource "aws_route" "internet_gateway" {
   gateway_id             = aws_internet_gateway.this.id
 }
 
+# Rules live in aws_vpc_security_group_{ingress,egress}_rule rather than in
+# inline ingress/egress blocks. The two cannot be mixed on one security group:
+# an inline block makes Terraform authoritative for every rule of that type, so
+# it revokes whatever the standalone resources added, and the group flaps on
+# every apply. This group had one of each.
 resource "aws_security_group" "internal" {
-  name   = "${var.project_name}_internal"
-  vpc_id = aws_vpc.this.id
+  name        = "${var.project_name}_internal"
+  description = "Node-to-node traffic for the ${var.project_name} cluster"
+  vpc_id      = aws_vpc.this.id
 
   # Same discovery tag as the subnets: this is the security group Karpenter
   # attaches to the nodes it launches, and it is what lets them reach the
@@ -45,47 +80,64 @@ resource "aws_security_group" "internal" {
   tags = {
     "karpenter.sh/discovery" = var.project_name
   }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
-  }
 }
 
-
 resource "aws_vpc_security_group_ingress_rule" "talos_internal" {
-  ip_protocol                  = -1
+  description                  = "All traffic between nodes in this cluster"
+  ip_protocol                  = "-1"
   security_group_id            = aws_security_group.internal.id
   referenced_security_group_id = aws_security_group.internal.id
 }
 
+# One rule per address family: the standalone rule resources take a single CIDR
+# each, where the inline block took a list.
+resource "aws_vpc_security_group_egress_rule" "internal_ipv4" {
+  description       = "Outbound IPv4, for image pulls and the AWS APIs"
+  ip_protocol       = "-1"
+  security_group_id = aws_security_group.internal.id
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+resource "aws_vpc_security_group_egress_rule" "internal_ipv6" {
+  description       = "Outbound IPv6, for image pulls and the AWS APIs"
+  ip_protocol       = "-1"
+  security_group_id = aws_security_group.internal.id
+  cidr_ipv6         = "::/0"
+}
+
+# No egress rules: control plane nodes carry the internal group as well, and
+# that is what grants them outbound access.
 resource "aws_security_group" "control_plane" {
-  name   = "${var.project_name}_talos_control_plane"
-  vpc_id = aws_vpc.this.id
+  name        = "${var.project_name}_talos_control_plane"
+  description = "External API access to the ${var.project_name} control plane"
+  vpc_id      = aws_vpc.this.id
+}
 
-  ingress {
-    protocol    = "tcp"
-    from_port   = 6443
-    to_port     = 6443
-    cidr_blocks = [var.kubernetes_api_allowed_cidr]
-  }
+resource "aws_vpc_security_group_ingress_rule" "kubernetes_api" {
+  description       = "Kubernetes API"
+  ip_protocol       = "tcp"
+  from_port         = 6443
+  to_port           = 6443
+  security_group_id = aws_security_group.control_plane.id
+  cidr_ipv4         = var.kubernetes_api_allowed_cidr
+}
 
-  ingress {
-    protocol    = "tcp"
-    from_port   = 50000
-    to_port     = 50000
-    cidr_blocks = [var.talos_api_allowed_cidr]
-  }
+resource "aws_vpc_security_group_ingress_rule" "talos_api" {
+  description       = "Talos API"
+  ip_protocol       = "tcp"
+  from_port         = 50000
+  to_port           = 50000
+  security_group_id = aws_security_group.control_plane.id
+  cidr_ipv4         = var.talos_api_allowed_cidr
 }
 
 resource "aws_lb" "this" {
   name               = var.project_name
   internal           = false
   load_balancer_type = "network"
-  subnets            = aws_subnet.this[*].id
+
+  enable_cross_zone_load_balancing = true
+  subnets                          = local.subnet_ids
 }
 
 resource "aws_lb_target_group" "this" {

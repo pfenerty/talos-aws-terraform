@@ -71,6 +71,35 @@ through a `HelmRelease` `valuesFrom` `targetPath`; Flux `postBuild`
 substitution is a plain string replace and would break the YAML indentation.
 
 
+### State
+
+There is no backend configured, so state is a local file. It holds the cluster
+CA key, the Flux deploy key and the IAM access keys for the post-install
+extras, all in plaintext - so it is worth moving somewhere encrypted and
+locked before this is more than a scratch cluster:
+
+```hcl
+# backend.tf
+terraform {
+  backend "s3" {
+    bucket       = "your-state-bucket"
+    key          = "talos-aws-terraform/terraform.tfstate"
+    region       = "us-east-2"
+    encrypt      = true
+    use_lockfile = true
+  }
+}
+```
+
+The bucket has to exist first, with versioning on. Migrate with
+`terraform init -migrate-state`.
+
+### Credentials
+
+The AWS provider uses the standard credential chain, so environment variables,
+SSO and instance or container roles all work without configuration. Set
+`aws_profile` to pin a named profile from your shared AWS config instead.
+
 When Terraform has completed, there will be a `kubeconfig` and `talosconfig` file in your working directory; after about a minute after completion you should have a functional cluster
 
 See `variables.tf` for available variables and descriptions
@@ -89,8 +118,9 @@ checkov -d . --config-file .checkov.yaml --framework terraform
 ```
 
 `.checkov.yaml` lists the checks that do not apply to this cluster, each with
-the reason. The checkov job is soft-fail while the remaining infrastructure
-findings are open; the other three block.
+the reason. Everything else is expected to pass, so all four checks block.
+
+Changes that existing state cannot absorb are written up in `MIGRATION.md`.
 
 The generated `kubeconfig`, `talosconfig` and machine config files contain
 cluster secrets. They are written by `local_sensitive_file` (mode 0600) and are

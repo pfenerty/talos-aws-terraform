@@ -38,10 +38,12 @@ terraform {
 }
 
 provider "aws" {
-  region                   = var.region
-  shared_config_files      = ["~/.aws/config"]
-  shared_credentials_files = ["~/.aws/credentials"]
-  profile                  = "default"
+  region = var.region
+
+  # Left to the standard AWS credential chain so this works unchanged under a
+  # CI role, SSO, or an assumed role. Set aws_profile to pin a named profile.
+  profile = var.aws_profile
+
   default_tags {
     tags = {
       "kubernetes.io/cluster/${var.project_name}" = "owned"

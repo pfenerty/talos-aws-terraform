@@ -11,11 +11,11 @@ output "load_balancer_target_group_arn" {
 }
 
 output "availability_zones" {
-  value = data.aws_availability_zones.available.names
+  value = local.availability_zones
 }
 
 output "public_subnets" {
-  value = aws_subnet.this[*].id
+  value = local.subnet_ids
 }
 
 output "control_plane_security_group_id" {

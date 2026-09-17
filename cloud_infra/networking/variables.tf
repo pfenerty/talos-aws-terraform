@@ -2,6 +2,12 @@ variable "project_name" {
   type = string
 }
 
+variable "availability_zones" {
+  description = "Availability Zones to create subnets in. Null means every zone the region currently reports, which is convenient but means the layout changes if AWS adds a zone; pin it for anything long-lived."
+  type        = list(string)
+  default     = null
+}
+
 variable "vpc_cidr" {
   description = "The IPv4 CIDR block for the VPC."
   type        = string
