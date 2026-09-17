@@ -127,6 +127,16 @@ variable "pod_cidr" {
   description = "Pod subnet CIDR. Set on the Talos machine config and reused as Cilium's strict-mode egress CIDR so the two cannot drift apart."
 }
 
+variable "hardening" {
+  type = object({
+    enabled                        = optional(bool, false)
+    pod_security_enforce           = optional(string, "restricted")
+    pod_security_exempt_namespaces = optional(list(string), ["kube-system"])
+  })
+  default     = {}
+  description = "Machine config hardening, off by default because it changes what the cluster will admit. `enabled` turns on a real API server audit policy and Pod Security Admission enforcing the standard named below. It is the machine config half of a hardening baseline and not the whole of one: docs/hardening.md sets out what it covers, what Talos already does without it, and what has to be enforced in the Flux repository or the AWS layer instead."
+}
+
 variable "config_output_path" {
   type        = string
   default     = null

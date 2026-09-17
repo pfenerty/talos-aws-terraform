@@ -25,6 +25,7 @@ module "cluster" {
   talos_version      = var.talos_version
   kubernetes_version = var.kubernetes_version
   pod_cidr           = var.pod_cidr
+  hardening          = var.hardening
 
   config_output_path = var.config_output_path
 }

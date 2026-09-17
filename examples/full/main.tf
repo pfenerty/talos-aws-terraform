@@ -85,6 +85,13 @@ module "talos_cluster" {
   # first apply.
   availability_zones = var.availability_zones
 
+  # Off by default: `restricted` Pod Security Admission will refuse workloads
+  # that a default cluster admits. docs/hardening.md covers what this does,
+  # and what it cannot do from a machine config.
+  hardening = {
+    enabled = false
+  }
+
   post_install = {
     flux   = var.flux
     extras = var.extras

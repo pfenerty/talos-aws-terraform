@@ -39,6 +39,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | config\_output\_path | Directory to write talosconfig and the generated machine configs into. Null writes nothing. | `string` | `null` | no |
+| hardening | Machine config hardening, off by default because it changes what the cluster will admit. See docs/hardening.md for what it does and does not cover, and for the settings Talos already applies without it. enabled turns on the hardened API server audit policy and the Pod Security Admission configuration described below. It has no worker half: everything a benchmark asks for on the node is already how Talos generates and runs the kubelet. pod\_security\_enforce is the Pod Security Standard enforced cluster-wide, and pod\_security\_exempt\_namespaces the namespaces exempted from it - kube-system has to stay exempt for Cilium, which needs a privileged pod to run at all. | <pre>object({<br/>    enabled                        = optional(bool, false)<br/>    pod_security_enforce           = optional(string, "restricted")<br/>    pod_security_exempt_namespaces = optional(list(string), ["kube-system"])<br/>  })</pre> | `{}` | no |
 | kubernetes\_version | Kubernetes version written into the machine configs. | `string` | n/a | yes |
 | load\_balancer\_dns | DNS name of the control plane load balancer, used as the cluster endpoint. | `string` | n/a | yes |
 | pod\_cidr | Pod subnet CIDR | `string` | n/a | yes |
