@@ -4,13 +4,16 @@ variable "client_configuration" {
     client_certificate = string
     client_key         = string
   })
-  sensitive = true
+  sensitive   = true
+  description = "Talos client certificates produced by the config module."
 }
 
 variable "public_ip" {
-  type = string
+  type        = string
+  description = "Public IP of a control plane node, used as the Talos API endpoint."
 }
 
 variable "private_ip" {
-  type = string
+  type        = string
+  description = "Private IP of the same control plane node, used as the Talos node address."
 }

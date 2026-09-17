@@ -1,5 +1,6 @@
 variable "project_name" {
-  type = string
+  type        = string
+  description = "Project name, used to name and tag the network resources and as the Karpenter discovery tag value."
 }
 
 variable "availability_zones" {

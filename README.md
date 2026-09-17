@@ -71,6 +71,21 @@ through a `HelmRelease` `valuesFrom` `targetPath`; Flux `postBuild`
 substitution is a plain string replace and would break the YAML indentation.
 
 
+### Exposure
+
+`talos_api_allowed_cidr` and `kubernetes_api_allowed_cidr` both default to
+`0.0.0.0/0`. That is what lets `terraform apply` bootstrap the cluster from
+wherever you happen to be running it, and it means both APIs are reachable from
+the internet on a default apply.
+
+The Talos API is the one to care about: port 50000 administers the machines
+themselves, below Kubernetes. Set both to your own address:
+
+```hcl
+talos_api_allowed_cidr      = "203.0.113.4/32"
+kubernetes_api_allowed_cidr = "203.0.113.4/32"
+```
+
 ### State
 
 There is no backend configured, so state is a local file. It holds the cluster
@@ -102,7 +117,8 @@ SSO and instance or container roles all work without configuration. Set
 
 When Terraform has completed, there will be a `kubeconfig` and `talosconfig` file in your working directory; after about a minute after completion you should have a functional cluster
 
-See `variables.tf` for available variables and descriptions
+See `variables.tf` for available variables and descriptions, and each module's
+README for its own inputs and outputs.
 
 ## Development
 
@@ -117,11 +133,18 @@ tflint --recursive
 checkov -d . --config-file .checkov.yaml --framework terraform
 ```
 
-`.checkov.yaml` lists the checks that do not apply to this cluster, each with
-the reason. Everything else is expected to pass, so all four checks block.
+`pre-commit install` runs all four on commit, plus the `terraform-docs`
+regeneration. `.checkov.yaml` lists the checks that do not apply to this
+cluster, each with the reason; everything else is expected to pass, so all four
+checks block.
 
-Changes that existing state cannot absorb are written up in `MIGRATION.md`.
+Each module has a README with a generated variable and output table. See
+`CONTRIBUTING.md` for the conventions.
 
 The generated `kubeconfig`, `talosconfig` and machine config files contain
 cluster secrets. They are written by `local_sensitive_file` (mode 0600) and are
 listed in `.gitignore` - anything new written there needs adding to both.
+
+## License
+
+MIT.

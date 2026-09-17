@@ -1,17 +1,21 @@
 variable "project_name" {
-  type = string
+  type        = string
+  description = "Project name, used to name the IAM resources and as the Karpenter cluster name."
 }
 
 variable "region" {
-  type = string
+  type        = string
+  description = "AWS region, passed to Karpenter so it launches nodes in the right place."
 }
 
 variable "cilium_version" {
-  type = string
+  type        = string
+  description = "Cilium chart version to install."
 }
 
 variable "k8s_service_host" {
-  type = string
+  type        = string
+  description = "Control plane load balancer DNS, published to the cluster in a secret."
 }
 
 variable "enables" {
@@ -27,7 +31,8 @@ variable "enables" {
       karpenter = bool
     })
   })
-  sensitive = true
+  sensitive   = true
+  description = "Mirror of the root post_install variable: which post-install steps to run, and the Flux git credentials."
   default = {
     flux = {
       enabled    = false

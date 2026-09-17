@@ -38,8 +38,13 @@ resource "aws_subnet" "this" {
   # Karpenter picks the subnets it launches into by tag. The tag is inert when
   # Karpenter is not installed, so it is not gated on the post-install flag.
   tags = {
-    Name                     = "${var.project_name}-${each.key}"
+    Name = "${var.project_name}-${each.key}"
+
     "karpenter.sh/discovery" = var.project_name
+
+    # How the AWS Load Balancer Controller and the in-tree cloud provider find
+    # subnets to put internet-facing load balancers in.
+    "kubernetes.io/role/elb" = "1"
   }
 }
 

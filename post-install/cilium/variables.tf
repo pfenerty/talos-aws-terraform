@@ -1,5 +1,6 @@
 variable "cilium_version" {
-  type = string
+  type        = string
+  description = "Cilium chart version to install."
 }
 
 variable "pod_cidr" {
