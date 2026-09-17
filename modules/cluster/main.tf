@@ -29,6 +29,7 @@ module "talos_config" {
   kubernetes_version = var.kubernetes_version
   talos_version      = var.talos_version
   pod_cidr           = var.pod_cidr
+  hardening          = var.hardening
   config_output_path = var.config_output_path
 }
 

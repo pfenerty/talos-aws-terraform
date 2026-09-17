@@ -94,15 +94,35 @@ bootstrap install and Flux's first reconcile.
 
 ## Machine config size
 
-The control plane machine config is applied as EC2 user data, which AWS
-caps at 16 KB. A generated Talos control plane config is about 11 KB before
-this module's patches, leaving roughly 5 KB. Additions to
-`common_machine_config_patch` spend that, and exceeding it fails the apply
-with an AWS error that does not mention the limit.
+The machine config is applied as EC2 user data, which AWS caps at 16 KB of
+raw, pre-base64 bytes. The rendered control plane config is 11336 bytes
+before hardening and 12463 with it, against a worker's 2958; additions to the
+config patches spend what is left.
 
-This is also why Cilium is a Helm release rather than a Talos inline
-manifest: rendered with the values above it is about 68 KB, and 18 KB
+Each `talos_machine_configuration` data source asserts the result fits, so
+this fails at plan with an error that says so. Exceeding it otherwise fails
+the apply with an AWS error that does not mention user data, and Karpenter
+nodes would fail to launch rather than fail a plan at all.
+
+There is no way around the limit on this platform: the AWS platform reads
+user data as-is, with no decompression, and the `talos.config` URL mechanism
+is `metal`-only. This is also why Cilium is a Helm release rather than a Talos
+inline manifest: rendered with the values above it is about 68 KB, and 18 KB
 gzipped.
+
+## Hardening
+
+`hardening` turns on Pod Security Admission at `restricted` and an API server
+audit policy worth reading. It is off by default because both can stop
+workloads being admitted.
+
+Most of what a Kubernetes benchmark asks for is already how Talos generates
+and runs the cluster, so the variable is deliberately small - and it is the
+machine config half of a baseline, not a baseline. [docs/hardening.md](docs/hardening.md)
+sets out what Talos already covers, what has to be enforced in the Flux
+repository or the AWS layer instead, how the config patches compose, and a
+known limitation that has no good answer yet: a machine config change does
+not reconfigure running nodes, it replaces them.
 
 ## Node autoscaling
 
@@ -271,6 +291,7 @@ No resources.
 | config\_output\_path | Directory to write the generated kubeconfig, talosconfig and machine config files into. Null, the default, writes nothing: the same files are available as outputs, and a module that writes into the caller's directory collides with itself when instantiated more than once. The files carry cluster credentials and are written mode 0600. | `string` | `null` | no |
 | control\_plane\_node\_instance\_type | AWS EC2 instance type for control plane nodes | `string` | `"t3.medium"` | no |
 | control\_plane\_nodes | Number of control plane nodes. etcd needs an odd number to hold quorum; 1 is fine for a throwaway cluster but has no redundancy, and an instance refresh will briefly take the API server away. | `number` | `1` | no |
+| hardening | Machine config hardening, off by default because it changes what the cluster will admit. `enabled` turns on a real API server audit policy and Pod Security Admission enforcing the standard named below. It is the machine config half of a hardening baseline and not the whole of one: docs/hardening.md sets out what it covers, what Talos already does without it, and what has to be enforced in the Flux repository or the AWS layer instead. | <pre>object({<br/>    enabled                        = optional(bool, false)<br/>    pod_security_enforce           = optional(string, "restricted")<br/>    pod_security_exempt_namespaces = optional(list(string), ["kube-system"])<br/>  })</pre> | `{}` | no |
 | hubble\_ca\_validity\_hours | Lifetime of the self-signed Hubble trust anchor, in hours. The default of 12 is carried over from before this was configurable and is almost certainly too short for a CA that cert-manager issues from - raise it, or move the trust anchor to cert-manager entirely. | `number` | `12` | no |
 | kubernetes\_api\_allowed\_cidr | CIDR allowed to reach the Kubernetes API on port 6443. Open to the internet by default; narrow it to your own address where you can. | `string` | `"0.0.0.0/0"` | no |
 | kubernetes\_version | Kubernetes version | `string` | `"1.37.0"` | no |

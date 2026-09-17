@@ -132,3 +132,13 @@ variable "config_output_path" {
   default     = null
   description = "Directory to write the generated kubeconfig, talosconfig and machine config files into. Null, the default, writes nothing: the same files are available as outputs, and a module that writes into the caller's directory collides with itself when instantiated more than once. The files carry cluster credentials and are written mode 0600."
 }
+
+variable "hardening" {
+  type = object({
+    enabled                        = optional(bool, false)
+    pod_security_enforce           = optional(string, "restricted")
+    pod_security_exempt_namespaces = optional(list(string), ["kube-system"])
+  })
+  default     = {}
+  description = "Machine config hardening, off by default because it changes what the cluster will admit. Passed through to the Talos config module; see docs/hardening.md for what it covers, what it deliberately leaves alone, and what has to be enforced outside the machine config."
+}
