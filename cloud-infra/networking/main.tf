@@ -75,7 +75,7 @@ resource "aws_route" "internet_gateway" {
 # it revokes whatever the standalone resources added, and the group flaps on
 # every apply. This group had one of each.
 resource "aws_security_group" "internal" {
-  name        = "${var.project_name}_internal"
+  name        = "${var.project_name}-internal"
   description = "Node-to-node traffic for the ${var.project_name} cluster"
   vpc_id      = aws_vpc.this.id
 
@@ -113,7 +113,7 @@ resource "aws_vpc_security_group_egress_rule" "internal_ipv6" {
 # No egress rules: control plane nodes carry the internal group as well, and
 # that is what grants them outbound access.
 resource "aws_security_group" "control_plane" {
-  name        = "${var.project_name}_talos_control_plane"
+  name        = "${var.project_name}-talos-control-plane"
   description = "External API access to the ${var.project_name} control plane"
   vpc_id      = aws_vpc.this.id
 }

@@ -41,7 +41,21 @@ variable "kubernetes_api_allowed_cidr" {
 variable "project_name" {
   type        = string
   default     = "talos-cluster"
-  description = "Project name, used to give names to various resources"
+  description = "Project name. Used as the prefix for every AWS resource name, as the Talos cluster name, and verbatim as the load balancer and target group name - which is what the constraints below come from."
+
+  # The load balancer and target group take this name verbatim, and AWS is
+  # stricter about those than about anything else here: 32 characters,
+  # alphanumeric and hyphens only, no hyphen at either end. An underscore
+  # anywhere in the name failed at apply time rather than at plan time.
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9]([a-zA-Z0-9-]{0,30}[a-zA-Z0-9])?$", var.project_name))
+    error_message = "project_name must be 1-32 alphanumeric characters and hyphens, and may not start or end with a hyphen: it is used verbatim as the load balancer and target group name."
+  }
+
+  validation {
+    condition     = !startswith(var.project_name, "internal-")
+    error_message = "project_name must not start with \"internal-\": AWS reserves that prefix for internal load balancers."
+  }
 }
 
 variable "control_plane_nodes" {
