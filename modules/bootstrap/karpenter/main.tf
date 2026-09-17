@@ -154,3 +154,27 @@ resource "kubernetes_secret_v1" "this" {
     node-user-data        = var.node_user_data
   }
 }
+
+# The same credentials again, in the namespace the controller runs in and
+# shaped as environment variables, because that is the only way the Karpenter
+# chart will take them. Its `settings` are ordinary Helm values, so the secret
+# above reaches them through the HelmRelease's valuesFrom - but credentials
+# are not chart values at all: the controller reads them from its own
+# environment, and the only hook for that is `controller.envFrom`, which
+# resolves the secret in the pod's namespace rather than the HelmRelease's.
+#
+# Hence two secrets rather than one. The alternative is granting the worker
+# instance profile the Karpenter policy and letting the controller pick it up
+# from IMDS, which would hand the same permissions to every pod on the node.
+resource "kubernetes_secret_v1" "credentials" {
+  metadata {
+    name      = "karpenter-aws-credentials"
+    namespace = "kube-system"
+  }
+
+  data = {
+    AWS_ACCESS_KEY_ID     = aws_iam_access_key.this.id
+    AWS_SECRET_ACCESS_KEY = aws_iam_access_key.this.secret
+    AWS_REGION            = var.region
+  }
+}

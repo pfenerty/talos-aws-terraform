@@ -39,14 +39,21 @@ data "talos_cluster_health" "this" {
   }
 }
 
-resource "random_uuid" "cluster_flux_id" {}
-
+# The sync path is the project name, not a generated one. Flux bootstrap only
+# ever writes `<path>/flux-system`, while the Kustomizations that describe what
+# the cluster actually runs are committed to `<path>` in the bootstrap
+# repository beforehand - which is only possible if the path is known before
+# the apply. A generated path also orphans a directory on every destroy and
+# recreate, and gives the repository no way to tell one cluster from another.
+#
+# project_name is already constrained to what a load balancer name allows, so
+# it is a valid path segment.
 resource "flux_bootstrap_git" "this" {
   count = var.flux.enabled ? 1 : 0
 
   depends_on = [data.talos_cluster_health.this]
 
-  path = "clusters/${random_uuid.cluster_flux_id.result}"
+  path = "clusters/${var.cluster.project_name}"
 
   kustomization_override = file("${path.module}/flux.patch.yaml")
 }

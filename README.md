@@ -156,13 +156,22 @@ Terraform owns the AWS side and the handoff to Flux:
   interruption and health events into it.
 * `karpenter.sh/discovery = <project name>` tags on the subnets and on the
   internal security group, which is how the `EC2NodeClass` selects them.
-* A `karpenter-config` secret in `flux-system`.
+* A `karpenter-config` secret in `flux-system`, and a `karpenter-aws-credentials`
+  secret in `kube-system`.
 
 The Karpenter `HelmRelease`, `EC2NodeClass` and `NodePool` live in the Flux
-bootstrap repository and read that secret. It carries the controller
-credentials, `cluster-name`, `cluster-endpoint` (Karpenter only discovers this
-by itself on EKS), `region`, `interruption-queue`, `discovery-tag`,
-`node-instance-profile`, `node-ami-id` and `node-user-data`.
+bootstrap repository and read those secrets. `karpenter-config` carries
+`cluster-name`, `cluster-endpoint` (Karpenter only discovers this by itself on
+EKS), `region`, `interruption-queue`, `discovery-tag`,
+`node-instance-profile`, `node-ami-id` and `node-user-data`, and the
+`HelmRelease` reads it through `valuesFrom`, which resolves secrets in the
+`HelmRelease`'s own namespace.
+
+The credentials are in a second secret because they are not chart values: the
+controller reads them from its environment, and the chart's only hook for that
+is `controller.envFrom`, which resolves the secret in the *pod's* namespace.
+Hence the same key pair in `kube-system`, shaped as `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY` and `AWS_REGION`.
 
 `node-user-data` is a Talos worker machine config, so the `EC2NodeClass` needs
 `amiFamily: Custom`. Two things follow from that. Karpenter does not get to
@@ -178,9 +187,24 @@ substitution is a plain string replace and would break the YAML indentation.
 The post-install extras are written against
 [pfenerty/flux-bootstrap](https://github.com/pfenerty/flux-bootstrap) and
 publish the secrets it reads - `cilium-config`, `karpenter-config`,
-`aws-secret` and `aws-loadbalancer-config`. Using them with a different
-GitOps repository means matching those names and shapes;
+`karpenter-aws-credentials`, `aws-secret` and `aws-loadbalancer-config`. Using
+them with a different GitOps repository means matching those names and shapes;
 [`modules/bootstrap`](modules/bootstrap) documents each one.
+
+Flux syncs `clusters/<project_name>`, and bootstrap writes only the
+`flux-system` directory inside it. Everything else the cluster runs is
+committed to that directory in the bootstrap repository *before* the apply:
+
+```sh
+git clone ssh://git@github.com/you/flux-bootstrap.git
+cd flux-bootstrap
+cp -r clusters/template clusters/my-cluster
+git add clusters/my-cluster && git commit -m "Add my-cluster" && git push
+```
+
+Apply with the path empty and the cluster comes up with Flux installed and
+nothing else, which is a valid thing to want but rarely what was meant. The
+path is `terraform output flux_path`.
 
 ## Exposure
 
@@ -274,7 +298,6 @@ MIT.
 | helm | ~> 3.3 |
 | kubernetes | ~> 3.2 |
 | local | ~> 2.9 |
-| random | ~> 3.9 |
 | talos | ~> 0.11 |
 | tls | ~> 4.4 |
 
