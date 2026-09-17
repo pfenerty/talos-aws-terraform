@@ -115,7 +115,16 @@ The AWS provider uses the standard credential chain, so environment variables,
 SSO and instance or container roles all work without configuration. Set
 `aws_profile` to pin a named profile from your shared AWS config instead.
 
-When Terraform has completed, there will be a `kubeconfig` and `talosconfig` file in your working directory; after about a minute after completion you should have a functional cluster
+When Terraform has completed, there will be a `kubeconfig` and `talosconfig`
+file in your working directory, and the cluster is already functional: the
+apply blocks on `talos_cluster_health` until etcd has quorum, every node's
+kubelet is up and the control plane components are live, so there is nothing
+left to wait out afterwards.
+
+`cluster_health_timeout` (default 10 minutes) caps that wait. It is a ceiling
+rather than a delay - the check returns as soon as the cluster is ready - but
+note that Terraform re-reads the health check on refresh, so it also bounds how
+long a `plan` blocks when the cluster is unreachable.
 
 See `variables.tf` for available variables and descriptions, and each module's
 README for its own inputs and outputs.
