@@ -42,7 +42,7 @@ module "autoscaler" {
   depends_on = [flux_bootstrap_git.this]
 }
 
-resource "kubernetes_secret" "aws_lb_config" {
+resource "kubernetes_secret_v1" "aws_lb_config" {
   count = var.enables.flux.enabled ? 1 : 0
 
   depends_on = [flux_bootstrap_git.this]

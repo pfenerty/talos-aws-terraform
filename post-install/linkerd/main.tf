@@ -16,7 +16,7 @@ resource "tls_self_signed_cert" "linkerd" {
   is_ca_certificate = true
 }
 
-resource "kubernetes_namespace" "linkerd" {
+resource "kubernetes_namespace_v1" "linkerd" {
   metadata {
     name = "linkerd"
 
@@ -26,7 +26,7 @@ resource "kubernetes_namespace" "linkerd" {
   }
 }
 
-resource "kubernetes_secret" "linkerd_trust_anchor_flux" {
+resource "kubernetes_secret_v1" "linkerd_trust_anchor_flux" {
   type = "kubernetes.io/tls"
 
   metadata {
@@ -40,7 +40,7 @@ resource "kubernetes_secret" "linkerd_trust_anchor_flux" {
   }
 }
 
-resource "kubernetes_secret" "linkerd_trust_anchor_linkerd" {
+resource "kubernetes_secret_v1" "linkerd_trust_anchor_linkerd" {
   type = "kubernetes.io/tls"
 
   metadata {

@@ -19,7 +19,7 @@ resource "aws_iam_access_key" "ebs" {
   user = aws_iam_user.ebs.name
 }
 
-resource "kubernetes_secret" "ebs" {
+resource "kubernetes_secret_v1" "ebs" {
   metadata {
     name      = "aws-secret"
     namespace = "kube-system"
