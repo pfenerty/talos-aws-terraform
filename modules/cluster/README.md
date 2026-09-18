@@ -40,7 +40,7 @@ as a Talos inline manifest: rendered, it is about 68 KB.
 
 | Name | Version |
 |------|---------|
-| aws | ~> 6.65 |
+| aws | 6.65.0 |
 
 ## Modules
 
@@ -55,6 +55,7 @@ as a Talos inline manifest: rendered, it is about 68 KB.
 
 | Name | Type |
 |------|------|
+| [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_instances.control_plane_instances](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/instances) | data source |
 | [aws_instances.worker_instances](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/instances) | data source |
 
@@ -94,6 +95,7 @@ as a Talos inline manifest: rendered, it is about 68 KB.
 | kubeconfig | Admin kubeconfig for the cluster. Contains cluster credentials. |
 | load\_balancer\_dns | DNS name of the network load balancer in front of the control plane. |
 | node\_count | Number of nodes the cluster is created with, before Karpenter provisions anything. Used to size add-ons whose replica counts cannot exceed the number of nodes. |
+| oidc\_issuer\_url | URL the API server names as the issuer of its service account tokens, and where the bootstrap module publishes the OIDC discovery documents. Registered with AWS as an IAM identity provider. |
 | subnet\_ids | Subnets the cluster runs in, ordered by Availability Zone. |
 | talos\_ami\_id | AMI the cluster nodes boot from. |
 | talosconfig | Talos client configuration. Contains cluster credentials. |

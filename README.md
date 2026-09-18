@@ -53,7 +53,7 @@ cluster and Terraform cannot generate those dynamically.
 | Module | What it does |
 |--------|--------------|
 | [`modules/cluster`](modules/cluster) | VPC, load balancer, security groups, autoscaling groups, Talos machine configuration and bootstrap. Needs `aws`, `talos` and `local`, all configurable up front. Produces a cluster whose API server answers and whose nodes are still `NotReady`. |
-| [`modules/bootstrap`](modules/bootstrap) | Cilium, the health gate, Flux, and the AWS resources the Flux repository consumes. Needs `kubernetes`, `helm` and `flux`, which can only be configured from the cluster module's outputs. |
+| [`modules/bootstrap`](modules/bootstrap) | Cilium, the health gate, Flux, the cluster's OIDC identity provider, and the AWS resources the Flux repository consumes. Needs `kubernetes`, `helm` and `flux`, which can only be configured from the cluster module's outputs. |
 
 The split is not stylistic. It is where the provider dependency actually
 falls, and keeping it explicit is what lets the cluster half be reused.
@@ -95,9 +95,11 @@ bootstrap install and Flux's first reconcile.
 ## Machine config size
 
 The machine config is applied as EC2 user data, which AWS caps at 16 KB of
-raw, pre-base64 bytes. The rendered control plane config is 11336 bytes
-before hardening and 12463 with it, against a worker's 2958; additions to the
-config patches spend what is left.
+raw, pre-base64 bytes. The rendered control plane config is 11564 bytes
+before hardening and 12691 with it, against a worker's 2958; additions to the
+config patches spend what is left. 228 of those bytes are the two API server
+arguments that point service account tokens at the OIDC issuer, which are on
+the control plane only.
 
 Each `talos_machine_configuration` data source asserts the result fits, so
 this fails at plan with an error that says so. Exceeding it otherwise fails
@@ -147,31 +149,32 @@ everything above it.
 
 Terraform owns the AWS side and the handoff to Flux:
 
-* An IAM user scoped to the Karpenter controller policy, adapted from the
-  upstream CloudFormation template. The EKS-only grants are dropped, along with
-  the instance-profile write grants: Karpenter launches nodes into the existing
-  worker instance profile rather than managing one of its own.
+* An IAM role scoped to the Karpenter controller policy, adapted from the
+  upstream CloudFormation template, assumable only by Karpenter's own service
+  account. The EKS-only grants are dropped, along with the instance-profile
+  write grants: Karpenter launches nodes into the existing worker instance
+  profile rather than managing one of its own.
 * An SQS interruption queue, and the EventBridge rules that feed spot
   interruption, rebalance, instance state change, capacity reservation
   interruption and health events into it.
 * `karpenter.sh/discovery = <project name>` tags on the subnets and on the
   internal security group, which is how the `EC2NodeClass` selects them.
-* A `karpenter-config` secret in `flux-system`, and a `karpenter-aws-credentials`
-  secret in `kube-system`.
+* A `karpenter-config` secret in `flux-system`, and a `karpenter-aws-config`
+  ConfigMap in `kube-system`.
 
 The Karpenter `HelmRelease`, `EC2NodeClass` and `NodePool` live in the Flux
-bootstrap repository and read those secrets. `karpenter-config` carries
+bootstrap repository and read those. `karpenter-config` carries
 `cluster-name`, `cluster-endpoint` (Karpenter only discovers this by itself on
 EKS), `region`, `interruption-queue`, `discovery-tag`,
 `node-instance-profile`, `node-ami-id` and `node-user-data`, and the
 `HelmRelease` reads it through `valuesFrom`, which resolves secrets in the
 `HelmRelease`'s own namespace.
 
-The credentials are in a second secret because they are not chart values: the
-controller reads them from its environment, and the chart's only hook for that
-is `controller.envFrom`, which resolves the secret in the *pod's* namespace.
-Hence the same key pair in `kube-system`, shaped as `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY` and `AWS_REGION`.
+The second object exists because the controller's AWS identity is not a chart
+value: it is read from the environment, and the chart's only hook for that is
+`controller.envFrom`, which resolves in the *pod's* namespace. It carries
+`AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_REGION`, and no
+credential - see [Cluster identity](#cluster-identity).
 
 `node-user-data` is a Talos worker machine config, so the `EC2NodeClass` needs
 `amiFamily: Custom`. Two things follow from that. Karpenter does not get to
@@ -186,9 +189,10 @@ substitution is a plain string replace and would break the YAML indentation.
 
 The post-install extras are written against
 [pfenerty/flux-bootstrap](https://github.com/pfenerty/flux-bootstrap) and
-publish the secrets it reads - `cilium-config`, `karpenter-config`,
-`karpenter-aws-credentials`, `aws-secret` and `aws-loadbalancer-config`. Using
-them with a different GitOps repository means matching those names and shapes;
+publish what it reads - the `cilium-config` and `karpenter-config` secrets,
+the `cloud-controller-manager-aws-config`, `ebs-csi-driver-aws-config` and
+`karpenter-aws-config` ConfigMaps, and `aws-loadbalancer-config`. Using them
+with a different GitOps repository means matching those names and shapes;
 [`modules/bootstrap`](modules/bootstrap) documents each one.
 
 Flux syncs `clusters/<project_name>`, and bootstrap writes only the
@@ -205,6 +209,47 @@ git add clusters/my-cluster && git commit -m "Add my-cluster" && git push
 Apply with the path empty and the cluster comes up with Flux installed and
 nothing else, which is a valid thing to want but rarely what was meant. The
 path is `terraform output flux_path`.
+
+## Cluster identity
+
+Nothing in this cluster holds an AWS key pair. The cloud controller manager,
+the EBS CSI driver and Karpenter each assume an IAM role by presenting a
+service account token the cluster signed - IRSA, without EKS.
+
+Making that work off EKS takes three things, and the module does all three:
+
+* **The cluster's OpenID Connect documents, published where AWS can read
+  them.** AWS verifies a token by fetching the issuer's discovery document
+  and public keys over anonymous HTTPS. EKS serves them from the control
+  plane; here the API server cannot, because anonymous authentication is off
+  and turning it on to expose two documents would be a far worse trade. They
+  are copied from the API server into an S3 bucket instead - as they are,
+  rather than reconstructed, so they cannot disagree with it.
+* **The API server naming that URL as its issuer.** `service-account-issuer`
+  is the bucket's URL and `api-audiences` adds `sts.amazonaws.com` alongside
+  it. Both are in the machine config, which is why the bucket is named before
+  the cluster is created and why changing this on a running cluster
+  invalidates every service account token until the kubelets refresh them.
+* **A trust policy per role that names one service account.** `sub` is pinned
+  to `system:serviceaccount:kube-system:<name>` and `aud` to
+  `sts.amazonaws.com`, both with `StringEquals`. A token from any other
+  workload is refused.
+
+This is also what makes the metadata service worth closing. Both launch
+templates set an IMDS hop limit of 1, so a pod cannot reach `169.254.169.254`
+at all: a packet leaving a pod's network namespace has already spent its one
+hop. Without that, a role scoped to a single service account would be no
+constraint at all, because any pod could ask the metadata service for the
+node's credentials instead. The control plane role is consequently empty -
+the cloud controller manager was its only consumer - and the worker role
+keeps nothing but ECR pull and `ec2:Describe*`, both used by the kubelet on
+the host.
+
+The cost is that nothing in a pod may read instance metadata. The cloud
+controller manager is given its region and VPC in a cloud config file, and
+the EBS CSI node plugin is told to read its instance facts from the
+Kubernetes API; both are configured in the Flux bootstrap repository. A
+workload added later that expects IMDS will not work.
 
 ## Exposure
 
@@ -246,9 +291,10 @@ is unreachable.
 ## State
 
 There is no backend configured, so state is a local file. It holds the cluster
-CA key, the Flux deploy key and the IAM access keys for the post-install
-extras, all in plaintext - so it is worth moving somewhere encrypted and
-locked before this is more than a scratch cluster:
+CA key and the Flux deploy key in plaintext - so it is worth moving somewhere
+encrypted and locked before this is more than a scratch cluster. There are no
+long-lived AWS credentials in it: everything in the cluster that talks to AWS
+assumes a role, and the roles are named in state rather than held there.
 
 ```hcl
 # backend.tf

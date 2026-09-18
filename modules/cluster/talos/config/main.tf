@@ -79,6 +79,24 @@ locals {
       apiServer = {
         extraArgs = {
           cloud-provider = "external"
+
+          # IRSA, which is how everything in the cluster that talks to AWS
+          # authenticates: the cloud controller manager, the EBS CSI driver
+          # and Karpenter all trade a projected service account token for
+          # role credentials rather than holding a key pair.
+          #
+          # AWS can only verify those tokens if it can fetch the issuer's
+          # discovery document and public keys, so the issuer is an S3 URL
+          # rather than the in-cluster default. `jwks_uri` is not set
+          # alongside it: Kubernetes derives it as <issuer>/openid/v1/jwks,
+          # and the bootstrap module publishes the documents at exactly the
+          # paths the API server's own discovery document names.
+          #
+          # api-audiences keeps the issuer as an accepted audience, which is
+          # what it defaults to when unset, so ordinary in-cluster tokens are
+          # unaffected; sts.amazonaws.com is the audience AWS requires.
+          service-account-issuer = var.service_account_issuer
+          api-audiences          = "${var.service_account_issuer},sts.amazonaws.com"
         }
       }
       controllerManager = {

@@ -22,15 +22,34 @@ module "networking" {
   tags                        = local.tags
 }
 
+data "aws_caller_identity" "current" {}
+
+locals {
+  # The cluster publishes its OpenID Connect discovery documents to this
+  # bucket, and names the bucket's URL as the issuer of its service account
+  # tokens - which is what lets AWS verify them and makes IRSA work without
+  # EKS. The bucket itself is created by the bootstrap module; the name is
+  # decided here because the API server's issuer flag has to carry it, and
+  # that flag is baked into the machine config rendered below.
+  #
+  # The account ID is in the name because S3 bucket names are global, and a
+  # project name on its own would collide with the same project in someone
+  # else's account. Virtual-hosted style, so the name must stay
+  # DNS-compatible: project_name is already constrained to that.
+  oidc_bucket     = "${var.project_name}-oidc-${data.aws_caller_identity.current.account_id}"
+  oidc_issuer_url = "https://${local.oidc_bucket}.s3.${var.region}.amazonaws.com"
+}
+
 module "talos_config" {
-  source             = "./talos/config"
-  project_name       = var.project_name
-  load_balancer_dns  = module.networking.load_balancer_dns
-  kubernetes_version = var.kubernetes_version
-  talos_version      = var.talos_version
-  pod_cidr           = var.pod_cidr
-  hardening          = var.hardening
-  config_output_path = var.config_output_path
+  source                 = "./talos/config"
+  project_name           = var.project_name
+  load_balancer_dns      = module.networking.load_balancer_dns
+  service_account_issuer = local.oidc_issuer_url
+  kubernetes_version     = var.kubernetes_version
+  talos_version          = var.talos_version
+  pod_cidr               = var.pod_cidr
+  hardening              = var.hardening
+  config_output_path     = var.config_output_path
 }
 
 module "compute" {
@@ -102,4 +121,19 @@ module "talos_bootstrap" {
   public_ip            = local.control_plane.public_ips[local.bootstrap_index]
   private_ip           = local.control_plane.private_ips[local.bootstrap_index]
   config_output_path   = var.config_output_path
+}
+
+locals {
+  # The admin credentials again, split into the fields a client needs, so the
+  # bootstrap module can read the cluster's OIDC discovery documents straight
+  # from the API server over mutual TLS. Decomposed the same way
+  # `examples/full` decomposes it for the kubernetes provider.
+  kubeconfig = yamldecode(module.talos_bootstrap.kubeconfig)
+
+  kubernetes_client_configuration = {
+    host               = local.kubeconfig["clusters"][0]["cluster"]["server"]
+    ca_certificate     = base64decode(local.kubeconfig["clusters"][0]["cluster"]["certificate-authority-data"])
+    client_certificate = base64decode(local.kubeconfig["users"][0]["user"]["client-certificate-data"])
+    client_key         = base64decode(local.kubeconfig["users"][0]["user"]["client-key-data"])
+  }
 }

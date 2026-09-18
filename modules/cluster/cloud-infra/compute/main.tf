@@ -3,6 +3,17 @@ data "aws_ami" "this" {
   name_regex = "^talos-${var.talos_version}-${var.region}-amd64$"
 }
 
+# The control plane role grants nothing, deliberately. Its only consumer was
+# the AWS cloud controller manager, which now authenticates with IRSA - a web
+# identity role it assumes with a projected service account token, scoped to
+# its own service account. The role and instance profile stay because an
+# instance profile is how a node would ever get AWS credentials at all, and
+# leaving an empty one attached makes it obvious that the absence is
+# deliberate rather than forgotten.
+#
+# Nothing on a control plane node needs the AWS API. Talos reads instance
+# metadata, which is not IAM-gated, and the control plane images come from
+# public registries rather than ECR.
 resource "aws_iam_role" "control_plane_assume_role" {
   name = "${var.project_name}-control-plane-assume-role"
   assume_role_policy = jsonencode({
@@ -20,20 +31,6 @@ resource "aws_iam_role" "control_plane_assume_role" {
   })
 
   tags = var.tags
-}
-
-resource "aws_iam_policy" "control_plane" {
-  name        = "${var.project_name}-control-plane-cloud-controller"
-  description = "Control Plane permissions for cloud controller"
-
-  policy = file("${path.module}/control-plane.policy.json")
-
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "control_plane" {
-  role       = aws_iam_role.control_plane_assume_role.name
-  policy_arn = aws_iam_policy.control_plane.arn
 }
 
 resource "aws_iam_instance_profile" "control_plane" {
@@ -69,9 +66,21 @@ resource "aws_launch_template" "control_plane" {
     http_endpoint = "enabled"
     http_tokens   = "required"
 
-    # 2, not 1: the kubelet and the cloud controller reach IMDS from the host
-    # network, which is one hop further than the instance itself.
-    http_put_response_hop_limit = 2
+    # 1, so that a pod cannot reach the metadata service at all: a packet
+    # leaving a pod's network namespace has already spent a hop by the time
+    # it gets here, and is dropped. Only processes on the host - Talos and
+    # the kubelet - can read it.
+    #
+    # This is the setting, not a network policy, that makes IRSA worth having:
+    # a role scoped to one service account is no constraint at all while any
+    # pod can ask the metadata service for the node's credentials instead.
+    #
+    # It requires that nothing in a pod reads instance metadata. The cloud
+    # controller manager is given its region and VPC in a cloud config file,
+    # and the EBS CSI node plugin is set to read its metadata from the
+    # Kubernetes API - both in the Flux bootstrap repository. A workload added
+    # later that expects IMDS will fail here.
+    http_put_response_hop_limit = 1
   }
 
   block_device_mappings {
@@ -208,9 +217,21 @@ resource "aws_launch_template" "worker" {
     http_endpoint = "enabled"
     http_tokens   = "required"
 
-    # 2, not 1: the kubelet and the cloud controller reach IMDS from the host
-    # network, which is one hop further than the instance itself.
-    http_put_response_hop_limit = 2
+    # 1, so that a pod cannot reach the metadata service at all: a packet
+    # leaving a pod's network namespace has already spent a hop by the time
+    # it gets here, and is dropped. Only processes on the host - Talos and
+    # the kubelet - can read it.
+    #
+    # This is the setting, not a network policy, that makes IRSA worth having:
+    # a role scoped to one service account is no constraint at all while any
+    # pod can ask the metadata service for the node's credentials instead.
+    #
+    # It requires that nothing in a pod reads instance metadata. The cloud
+    # controller manager is given its region and VPC in a cloud config file,
+    # and the EBS CSI node plugin is set to read its metadata from the
+    # Kubernetes API - both in the Flux bootstrap repository. A workload added
+    # later that expects IMDS will fail here.
+    http_put_response_hop_limit = 1
   }
 
   block_device_mappings {

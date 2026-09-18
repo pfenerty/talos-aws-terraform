@@ -20,6 +20,27 @@ variable "cluster" {
     worker_iam_role_arn             = string
     worker_ami_id                   = string
     karpenter_worker_machine_config = string
+
+    # IRSA. The bucket is created here but named by the cluster module,
+    # because the issuer URL built from it is in the API server's machine
+    # config, and the cluster module is what renders that.
+    oidc_bucket     = string
+    oidc_issuer_url = string
+
+    # Facts the cloud controller manager is given in its cloud config, now
+    # that a pod cannot read them from the instance metadata service.
+    vpc_id    = string
+    subnet_id = string
+
+    # Admin credentials for the Kubernetes API, used to read the cluster's
+    # own OIDC discovery documents. The endpoints are not anonymous.
+    kubernetes_client_configuration = object({
+      ca_certificate     = string
+      client_certificate = string
+      client_key         = string
+    })
+
+    tags = map(string)
   })
 }
 

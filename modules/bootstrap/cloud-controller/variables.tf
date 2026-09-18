@@ -1,16 +1,21 @@
 variable "project_name" {
   type        = string
-  description = "Project name, used to name the EBS CSI driver's IAM role and policy."
-}
-
-variable "aws_account_id" {
-  type        = string
-  description = "Account ID, scoping the EBS CSI driver's policy to this account's volumes."
+  description = "Project name, used as the role name prefix and as the cloud controller's KubernetesClusterID - which must match the kubernetes.io/cluster tag on the cluster's resources."
 }
 
 variable "region" {
   type        = string
-  description = "AWS region the cluster runs in. Set explicitly because the driver can no longer read it from instance metadata."
+  description = "AWS region the cluster runs in. Set explicitly because the controller can no longer read it from instance metadata."
+}
+
+variable "vpc_id" {
+  type        = string
+  description = "VPC the cluster runs in."
+}
+
+variable "subnet_id" {
+  type        = string
+  description = "Any subnet in that VPC. Used only to build the controller's synthetic self-instance; load balancer placement is decided by subnet tags."
 }
 
 variable "token_path" {
