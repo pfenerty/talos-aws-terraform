@@ -398,18 +398,18 @@ the 22 rules above, and an assessor is entitled to ask about both:
 `kubernetes_talos_api_access` sets `machine.features.kubernetesTalosAPIAccess`,
 which lets Talos issue a Talos API client certificate to a service account in
 a named namespace, carrying named roles. The default shape is `os:admin` for
-`system-upgrade`, because that is what an in-cluster upgrade controller needs
-in order to call the upgrade API on each node.
+`tuppr-system`, because that is what an in-cluster upgrade controller needs in
+order to call the upgrade API on each node.
 
 Read against the paragraph above, that is the whole of it: **a pod in that
 namespace holds the credential the residual-risk argument is built on.** It
 can read every file the 22 uncheckable rules are about, the cluster CA key
 included, and it can replace the machine configuration on any node. An
 assessor who accepts "the control is access to the Talos API" will ask what is
-running in `system-upgrade`, and the honest answer has to cover the
-controller's image provenance, who can create workloads in that namespace, and
-who can write to the Flux repository that populates it - because that is now a
-path to `os:admin` on every machine.
+running in `tuppr-system`, and the honest answer has to cover the controller's
+image provenance, who can create workloads in that namespace, and who can
+write to the Flux repository that populates it - because that is now a path to
+`os:admin` on every machine.
 
 It is off by default and it is not part of `hardening`. Turning it on is a
 deliberate widening, and the reason to accept it is that the alternatives are
@@ -425,10 +425,64 @@ worse rather than that it is cheap:
   issued by Talos rather than copied around, and the thing using it is
   reconciling a manifest that went through review.
 
-Narrow it where the deployment allows. `roles` and `namespaces` are both
-configurable: a controller that only ever calls the upgrade API does not
-necessarily need `os:admin` on a cluster where a narrower role covers it, and
-the namespace should be one nothing else is deployed into.
+#### Where the credential actually lives
+
+Worth following, because it decides what containing it means. The machine
+config does not hand anything to a pod. What happens is:
+
+1. The machine config allows a namespace to request roles from a set.
+2. Something creates a `talos.dev/v1alpha1` `ServiceAccount` in that namespace
+   naming the roles it wants. tuppr's chart does this, with `os:admin`.
+3. Talos generates an ordinary Kubernetes Secret in that namespace, holding a
+   talosconfig with a client certificate carrying those roles.
+4. The pod mounts it. tuppr mounts it at `/var/run/secrets/talos.dev`, and so
+   do the per-node upgrade Jobs it creates.
+
+So the administrative credential for every machine in the cluster ends up as a
+Secret in a namespace, and **anything that can read Secrets there holds
+`os:admin` on every node.** That is a Kubernetes RBAC question rather than a
+Talos one, which is the good news: RBAC has the granularity Talos does not.
+
+#### Containing it
+
+Talos offers no granularity below the namespace - there is no service account
+or pod selector on `kubernetesTalosAPIAccess`, only `allowedRoles` and
+`allowedKubernetesNamespaces`. Three things follow, in order of how much they
+buy:
+
+* **The namespace holds nothing but the controller.** This is the whole of
+  what Talos itself enforces, so it carries the most weight and costs
+  nothing. The default here is `tuppr-system` rather than the conventional
+  `system-upgrade` for exactly this reason: `system-upgrade` is also where
+  Rancher's system-upgrade-controller and others install, and anything that
+  lands in the named namespace inherits the ability to mint `os:admin`. It
+  must match the controller's Helm release namespace exactly; a mismatch
+  fails every upgrade at the first node.
+* **Restrict `create` on `talos.dev/v1alpha1` `ServiceAccount` in it.**
+  Anything that can create one of those can mint itself a credential with any
+  role in `allowedRoles`. Kubernetes RBAC is deny-by-default, so this is about
+  not granting it later, and about who can commit to the Flux path that
+  renders into that namespace.
+* **Audit cluster-wide Secret readers.** This is the realistic leak path and
+  it is invisible from the machine config: any monitoring agent, backup tool
+  or operator holding a cluster-scoped `secrets: get`/`list` binding reads the
+  talosconfig. Check what the cluster already runs before enabling this.
+
+#### Why the role cannot be narrowed today
+
+`roles` is configurable, and on the face of it `os:operator` is the right
+answer - Talos defines it as "Reader + management APIs which do not allow
+secret access, e.g. rebooting a node", which removes precisely the ability to
+replace the machine configuration that the section above is about.
+
+It does not work with tuppr as it stands, for two reasons. Its preflight reads
+the raw machine config off each node over the COSI API and refuses to upgrade
+if it cannot, and reading the machine config is secret access. And its chart
+hardcodes `os:admin` in the `ServiceAccount` it generates, with no values knob,
+so testing the narrower role means maintaining a forked manifest.
+
+`roles` stays configurable here regardless, so if that changes upstream the
+narrowing is a variable rather than a code change.
 
 ## How the patches are built
 
