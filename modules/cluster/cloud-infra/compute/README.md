@@ -6,13 +6,13 @@
 | Name | Version |
 |------|---------|
 | terraform | >= 1.9 |
-| aws | ~> 6.65 |
+| aws | 6.65.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| aws | ~> 6.65 |
+| aws | 6.65.0 |
 
 ## Modules
 
@@ -43,6 +43,7 @@ No modules.
 | control\_plane\_machine\_config | Talos control plane machine config, applied as launch template user data. | `string` | n/a | yes |
 | control\_plane\_nodes | Size of the control plane autoscaling group. The group's max\_size is one higher, so an instance refresh can launch a replacement before terminating a node. | `number` | n/a | yes |
 | control\_plane\_security\_group\_id | Security group granting external access to the Kubernetes and Talos APIs. | `string` | n/a | yes |
+| instance\_refresh | Roll both autoscaling groups whenever their launch template changes. Off by default: the machine config is launch template user data, so this would replace every node to deliver a config edit, and the cluster module applies config changes to running nodes over the Talos API instead. Turning it on restores immutable-node behaviour, at the cost of an etcd membership change per control plane node per config change. | `bool` | `false` | no |
 | internal\_security\_group\_id | Security group allowing node-to-node traffic and outbound access. | `string` | n/a | yes |
 | load\_balancer\_target\_group\_arn | Target group the control plane autoscaling group registers into. | `string` | n/a | yes |
 | project\_name | Project name, used to name and tag the compute resources. | `string` | n/a | yes |

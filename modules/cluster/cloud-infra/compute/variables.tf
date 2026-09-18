@@ -75,3 +75,9 @@ variable "tags" {
   default     = {}
   description = "Tags applied to every resource, and propagated to the instances the autoscaling groups launch. Carries the kubernetes.io/cluster tag the AWS cloud controller manager looks for."
 }
+
+variable "instance_refresh" {
+  type        = bool
+  default     = false
+  description = "Roll both autoscaling groups whenever their launch template changes. Off by default: the machine config is launch template user data, so this would replace every node to deliver a config edit, and the cluster module applies config changes to running nodes over the Talos API instead. Turning it on restores immutable-node behaviour, at the cost of an etcd membership change per control plane node per config change."
+}

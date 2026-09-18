@@ -137,11 +137,24 @@ resource "aws_autoscaling_group" "control_plane" {
     }
   }
 
-  instance_refresh {
-    strategy = "Rolling"
-    preferences {
-      min_healthy_percentage = 100
-      max_healthy_percentage = 200
+  # A launch template change is what starts an instance refresh, and the
+  # machine config is in the launch template - so with this on, editing a
+  # config patch replaces every control plane node to deliver it. It is off
+  # by default because the config module applies changes to running nodes
+  # over the Talos API instead. See "Machine config updates" in the README.
+  #
+  # What that leaves behind is the AMI: a talos_version bump writes a new
+  # launch template too, and there is no in-place upgrade path for it here,
+  # so new nodes boot the new image and existing ones stay on the old one
+  # until they are rolled deliberately.
+  dynamic "instance_refresh" {
+    for_each = var.instance_refresh ? [1] : []
+    content {
+      strategy = "Rolling"
+      preferences {
+        min_healthy_percentage = 100
+        max_healthy_percentage = 200
+      }
     }
   }
 }
@@ -285,11 +298,15 @@ resource "aws_autoscaling_group" "worker" {
     }
   }
 
-  instance_refresh {
-    strategy = "Rolling"
-    preferences {
-      min_healthy_percentage = 100
-      max_healthy_percentage = 200
+  # Off by default for the same reason as the control plane group above.
+  dynamic "instance_refresh" {
+    for_each = var.instance_refresh ? [1] : []
+    content {
+      strategy = "Rolling"
+      preferences {
+        min_healthy_percentage = 100
+        max_healthy_percentage = 200
+      }
     }
   }
 }

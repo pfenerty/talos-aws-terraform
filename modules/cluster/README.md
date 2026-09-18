@@ -26,13 +26,28 @@ it, and running out fails the apply with an AWS error that does not
 mention the limit. This is why Cilium is installed with Helm rather than
 as a Talos inline manifest: rendered, it is about 68 KB.
 
+## Machine config updates
+
+Talos reads user data once, at first boot, so the launch templates only ever
+deliver a config change by replacing the node. `talos/apply` is the other
+half: it applies the same rendered config to the nodes already running, over
+the Talos API, so an edit reconfigures the cluster instead of rebuilding it -
+while user data stays the channel that gets a newly launched node up
+configured without anything to run by hand.
+
+`instance_refresh` on the autoscaling groups is consequently off by default,
+which leaves AMI changes to be rolled deliberately.
+`machine_config_updates` holds all three knobs; the root README's "Machine
+config updates" section is the long version, and `docs/hardening.md` covers
+what still replaces or reboots a node.
+
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
 
 | Name | Version |
 |------|---------|
 | terraform | >= 1.9 |
-| aws | ~> 6.65 |
+| aws | 6.65.0 |
 | local | ~> 2.9 |
 | talos | ~> 0.11 |
 
@@ -48,6 +63,8 @@ as a Talos inline manifest: rendered, it is about 68 KB.
 |------|--------|---------|
 | compute | ./cloud-infra/compute | n/a |
 | networking | ./cloud-infra/networking | n/a |
+| talos\_apply\_control\_plane | ./talos/apply | n/a |
+| talos\_apply\_workers | ./talos/apply | n/a |
 | talos\_bootstrap | ./talos/bootstrap | n/a |
 | talos\_config | ./talos/config | n/a |
 
@@ -71,6 +88,7 @@ as a Talos inline manifest: rendered, it is about 68 KB.
 | hardening | Machine config hardening, off by default because it changes what the cluster will admit. Passed through to the Talos config module; see docs/hardening.md for what it covers, what it deliberately leaves alone, and what has to be enforced outside the machine config. kubelet\_serving\_certificates additionally requires a CSR approver deployed by Flux; see the doc before enabling it. | <pre>object({<br/>    enabled                        = optional(bool, false)<br/>    pod_security_enforce           = optional(string, "restricted")<br/>    pod_security_exempt_namespaces = optional(list(string), ["kube-system"])<br/>    kubelet_serving_certificates   = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | kubernetes\_api\_allowed\_cidr | CIDR allowed to reach the Kubernetes API on port 6443. Open to the internet by default; narrow it to your own address where you can. | `string` | `"0.0.0.0/0"` | no |
 | kubernetes\_version | Kubernetes version | `string` | `"1.37.0"` | no |
+| machine\_config\_updates | How a machine config change reaches nodes that are already running. The<br/>machine config is launch template user data, which Talos reads once at<br/>first boot, so on its own it only ever reaches a node by replacing it.<br/><br/>`apply_to_running_nodes` applies the rendered config to the existing<br/>control plane and baseline worker nodes over the Talos API, which is what<br/>`talosctl apply-config` does, so a config edit reconfigures the cluster<br/>rather than rebuilding it. User data is still what a newly launched node<br/>reads, so nodes the autoscaling groups or Karpenter bring up later come<br/>up configured without anything to run by hand.<br/><br/>`apply_mode` is how Talos applies it. The default dry-runs the change and<br/>stages it for the next boot if it would need a reboot, applying it<br/>immediately otherwise - which is what keeps a config edit from rebooting<br/>every control plane node at once, since Terraform has no way to serialise<br/>that. `auto` reboots where Talos says a reboot is required.<br/><br/>`instance_refresh` rolls both autoscaling groups whenever their launch<br/>template changes, which is the old behaviour and the only way an AMI<br/>change reaches existing nodes. Off by default: with it on, a one-line<br/>config edit replaces every node in the cluster. | <pre>object({<br/>    apply_to_running_nodes = optional(bool, true)<br/>    apply_mode             = optional(string, "staged_if_needing_reboot")<br/>    instance_refresh       = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | pod\_cidr | Pod subnet CIDR. Set on the Talos machine config and reused as Cilium's strict-mode egress CIDR so the two cannot drift apart. | `string` | `"10.244.0.0/16"` | no |
 | project\_name | Project name. Used as the prefix for every AWS resource name, as the Talos cluster name, and verbatim as the load balancer and target group name - which is what the constraints below come from. Required: every name this module creates derives from it, and several of them are account-global. | `string` | n/a | yes |
 | region | AWS region the cluster runs in. This selects the Talos AMI and is handed to Karpenter; it does not configure the AWS provider, which is the caller's to set. | `string` | n/a | yes |
@@ -90,8 +108,8 @@ as a Talos inline manifest: rendered, it is about 68 KB.
 | client\_configuration | Talos client certificates, for the Talos provider's own data sources and resources. |
 | cluster\_endpoint | Kubernetes API endpoint, and the Talos cluster endpoint. |
 | control\_plane\_autoscaling\_group\_name | Name of the control plane autoscaling group. |
-| control\_plane\_private\_ips | Private addresses of the control plane nodes, which is how Talos identifies them. |
-| control\_plane\_public\_ips | Public addresses of the control plane nodes. The Talos API listens here; node addresses themselves are private. |
+| control\_plane\_private\_ips | Private addresses of the control plane nodes, ordered by instance ID, which is how Talos identifies them. |
+| control\_plane\_public\_ips | Public addresses of the control plane nodes, ordered by instance ID. The Talos API listens here; node addresses themselves are private. |
 | kubeconfig | Admin kubeconfig for the cluster. Contains cluster credentials. |
 | load\_balancer\_dns | DNS name of the network load balancer in front of the control plane. |
 | node\_count | Number of nodes the cluster is created with, before Karpenter provisions anything. Used to size add-ons whose replica counts cannot exceed the number of nodes. |
@@ -100,5 +118,5 @@ as a Talos inline manifest: rendered, it is about 68 KB.
 | talos\_ami\_id | AMI the cluster nodes boot from. |
 | talosconfig | Talos client configuration. Contains cluster credentials. |
 | vpc\_id | ID of the VPC the cluster runs in. |
-| worker\_private\_ips | Private addresses of the baseline worker nodes. |
+| worker\_private\_ips | Private addresses of the baseline worker nodes, ordered by instance ID. |
 <!-- END_TF_DOCS -->

@@ -201,3 +201,40 @@ variable "post_install" {
     error_message = "Post install extras are enabled but Flux post install is not. The extras are designed for Flux; enable Flux post install if you want to use them."
   }
 }
+
+variable "machine_config_updates" {
+  type = object({
+    apply_to_running_nodes = optional(bool, true)
+    apply_mode             = optional(string, "staged_if_needing_reboot")
+    instance_refresh       = optional(bool, false)
+  })
+  default     = {}
+  description = <<-EOT
+    How a machine config change reaches nodes that are already running. The
+    machine config is launch template user data, which Talos reads once at
+    first boot, so on its own it only ever reaches a node by replacing it.
+
+    `apply_to_running_nodes` applies the rendered config to the existing
+    control plane and baseline worker nodes over the Talos API, which is what
+    `talosctl apply-config` does, so a config edit reconfigures the cluster
+    rather than rebuilding it. User data is still what a newly launched node
+    reads, so nodes the autoscaling groups or Karpenter bring up later come
+    up configured without anything to run by hand.
+
+    `apply_mode` is how Talos applies it. The default dry-runs the change and
+    stages it for the next boot if it would need a reboot, applying it
+    immediately otherwise - which is what keeps a config edit from rebooting
+    every control plane node at once, since Terraform has no way to serialise
+    that. `auto` reboots where Talos says a reboot is required.
+
+    `instance_refresh` rolls both autoscaling groups whenever their launch
+    template changes, which is the old behaviour and the only way an AMI
+    change reaches existing nodes. Off by default: with it on, a one-line
+    config edit replaces every node in the cluster.
+  EOT
+
+  validation {
+    condition     = contains(["auto", "no_reboot", "reboot", "staged", "staged_if_needing_reboot", "try"], var.machine_config_updates.apply_mode)
+    error_message = "machine_config_updates.apply_mode must be one of auto, no_reboot, reboot, staged, staged_if_needing_reboot or try."
+  }
+}

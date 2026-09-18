@@ -478,43 +478,82 @@ machinery's own version, even though `talos_version` is `v1.14.1` and the AMI
 is 1.14.1. It is inert while nodes boot from the AMI and are never upgraded
 in place, and it would be the wrong installer the moment one is.
 
-## Known limitation: machine config changes do not reach running nodes
+## How a machine config change reaches running nodes
 
-**This needs a solution that does not exist in this repository yet.** Changing
-any patch here - enabling `hardening` on a live cluster, for instance - does
-not reconfigure anything. It replaces everything.
+Changing a patch here - enabling `hardening` on a live cluster, for instance -
+reconfigures the nodes rather than replacing them. That is not what user data
+alone would do, and it is worth knowing which half does what before relying on
+it for a change you care about.
 
 The machine config is user data. Talos reads user data once, at first boot,
-and thereafter its configuration lives in the `STATE` partition. A running
-node will never notice that Terraform rendered a different config. What
-Terraform does instead is:
+and thereafter its configuration lives in the `STATE` partition: a running
+node will never notice that Terraform rendered a different config. So the
+config is delivered over two channels, and each covers what the other cannot.
 
-* write a new launch template version, which
-* triggers a rolling instance refresh on both autoscaling groups, because an
-  `instance_refresh` block is configured and a launch template change starts
-  one, so
-* every control plane and baseline worker node is replaced, and separately
-* `node-user-data` in the `karpenter-config` secret changes, which Karpenter
-  sees as drift and acts on by replacing its nodes too.
+**User data covers nodes that do not exist yet.** The launch templates carry
+the rendered config, so a node the autoscaling group brings up on its own - a
+scale-out, a replacement after a failed health check - boots already
+configured, with nothing to run by hand. It is the only channel such a node
+ever sees.
 
-With `control_plane_nodes = 1` that is an API server outage, not a rolling
-update. Even at three it is a full control plane replacement and an etcd
-membership change per node, to deliver what may be a one-line config edit.
+**`talos_machine_configuration_apply` covers the nodes already running.**
+`modules/cluster/talos/apply` applies the same rendered string to the control
+plane and baseline worker nodes over the Talos API, which is what `talosctl
+apply-config` does and what Talos expects. Terraform performs it and records
+it, so the cluster and the state file agree - which an out-of-band
+`talosctl apply-config` would not, and which the next instance refresh would
+silently revert.
 
-The out-of-band alternative is `talosctl apply-config` against the live nodes,
-which works and is what Talos expects, but Terraform neither performs nor
-tracks it - so the cluster ends up configured differently from what the state
-file describes, and the next instance refresh silently reverts it. The
-provider's `talos_machine_configuration_apply` resource does not fit either:
-it addresses nodes by endpoint, and these nodes are launched by an autoscaling
-group with addresses Terraform does not know ahead of time.
+Two things made this awkward enough to be worth writing down:
 
-Approaches worth weighing when this is picked up, none of them free:
+* The resource addresses nodes by endpoint, and these nodes are launched by an
+  autoscaling group with addresses Terraform does not know ahead of time. They
+  are read back with `aws_instances` data sources, ordered by instance ID so
+  that an index names the same machine between plans, and the resources are
+  sized by the group's configured node count rather than by what the data
+  source returns - because Terraform resolves `count` and `for_each` at plan
+  time, and on a first apply the addresses are not known then.
+* Worker nodes carry only the internal security group, so their Talos API is
+  not reachable from outside the VPC. They are addressed through a control
+  plane node's public address instead, which routes to them over the
+  node-to-node rule.
 
-* Keep user data to a minimal bootstrap config and apply the rest through the
-  Talos API from a controller in the cluster, which also relieves the 16 KB
-  ceiling.
-* Accept the replacement but make it survivable: three control plane nodes
-  minimum, and gate config changes behind a maintenance window.
-* Drive `talosctl apply-config` from Terraform against discovered node
-  addresses, accepting that the state model stays approximate.
+`instance_refresh` on both autoscaling groups is consequently off by default.
+Left on, a launch template change starts a rolling refresh, and the machine
+config is in the launch template - so a one-line config edit replaced every
+control plane and baseline worker node. With `control_plane_nodes = 1` that
+is an API server outage rather than a rolling update; even at three it is a
+full control plane replacement and an etcd membership change per node.
+`machine_config_updates.instance_refresh` restores it for anyone who wants
+strictly immutable nodes and will pay that.
+
+### What still replaces or reboots a node
+
+* **Changes Talos cannot apply live.** `machine_config_updates.apply_mode`
+  defaults to `staged_if_needing_reboot`, which dry-runs the change and stages
+  it for the next boot rather than rebooting the node. Nothing in the patches
+  above needs a reboot today - API server arguments, admission control, the
+  audit policy and the kubelet settings all land live, restarting only the
+  affected service - but a patch that touched `machine.install`, the kernel
+  command line or the disk layout would. A staged change is on the node and
+  not in effect; `resolved_apply_mode` on the apply resource says which nodes
+  staged, and picking it up means rebooting them one at a time. The default is
+  what it is because Terraform creates the apply resources in parallel and has
+  no way to serialise them, so `auto` on a reboot-requiring change would
+  reboot the whole control plane at once.
+* **AMI changes.** A `talos_version` bump writes a new launch template, and
+  there is no in-place Talos upgrade path here - the provider has no resource
+  for it. New nodes boot the new image; existing ones stay on the old one
+  until they are rolled deliberately, with `aws autoscaling
+  start-instance-refresh` or `instance_refresh = true`.
+* **Karpenter nodes.** They are in neither autoscaling group and Terraform
+  does not know their addresses, so they get the config only at boot, from
+  `node-user-data` in the `karpenter-config` secret. Changing it is drift as
+  far as Karpenter is concerned and it replaces the nodes - which is the right
+  answer for capacity that is elastic by design, and is paced by the
+  `NodePool`'s disruption budget rather than by Terraform.
+* **Anything that changes the cluster's identity.** Rotating
+  `talos_machine_secrets`, or changing `service-account-issuer`, is not a
+  reconfiguration an apply can carry safely; the second invalidates every
+  service account token until the kubelets refresh them, as the README's
+  cluster identity section notes.

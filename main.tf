@@ -27,6 +27,8 @@ module "cluster" {
   pod_cidr           = var.pod_cidr
   hardening          = var.hardening
 
+  machine_config_updates = var.machine_config_updates
+
   config_output_path = var.config_output_path
 }
 
@@ -41,4 +43,11 @@ module "bootstrap" {
   cilium_bootstrap_version = var.cilium_bootstrap_version
   hubble_ca_validity_hours = var.hubble_ca_validity_hours
   cluster_health_timeout   = var.cluster_health_timeout
+
+  # Data flow already orders this after the cluster's outputs, but not after
+  # the machine config applies, which produce none. The health gate is the
+  # thing that decides the apply succeeded, so it has to run after the last
+  # change that could make the cluster unhealthy - including a kube-apiserver
+  # restart from a config apply.
+  depends_on = [module.cluster]
 }
