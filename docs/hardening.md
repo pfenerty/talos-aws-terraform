@@ -472,11 +472,14 @@ admission control only if `KubeAdmissionControlConfig` is unnamed and
 singular. Re-derive the merge behaviour from the reference at that point
 rather than assuming these patches port unchanged.
 
-One observable consequence of the skew today: the generated config pins
-`machine.install.image` to `ghcr.io/siderolabs/installer:v1.13.0`, the
+One observable consequence of the skew showed up in `machine.install.image`:
+the generated config pinned `ghcr.io/siderolabs/installer:v1.13.0`, the
 machinery's own version, even though `talos_version` is `v1.14.1` and the AMI
-is 1.14.1. It is inert while nodes boot from the AMI and are never upgraded
-in place, and it would be the wrong installer the moment one is.
+is 1.14.1. Inert while nodes only ever boot from the AMI, and the wrong
+installer the moment anything upgrades one in place - which is exactly what an
+in-place Talos upgrade does. `cluster_patch` now overrides it with
+`var.talos_version`, at no cost against the 16 KB ceiling: the two strings are
+the same length.
 
 ## How a machine config change reaches running nodes
 
