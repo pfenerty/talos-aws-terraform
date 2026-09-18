@@ -180,3 +180,27 @@ variable "machine_config_updates" {
     error_message = "machine_config_updates.apply_mode must be one of auto, no_reboot, reboot, staged, staged_if_needing_reboot or try."
   }
 }
+
+variable "kubernetes_talos_api_access" {
+  type = object({
+    enabled    = optional(bool, false)
+    roles      = optional(list(string), ["os:admin"])
+    namespaces = optional(list(string), ["system-upgrade"])
+  })
+  default     = {}
+  description = <<-EOT
+    Lets service accounts in the named Kubernetes namespaces obtain Talos API
+    credentials carrying the named roles. Off by default.
+
+    This is how an in-cluster upgrade controller - tuppr, in the Flux bootstrap
+    repository - calls the Talos upgrade API on each node, which is what makes
+    a Talos version bump a change to a manifest rather than a fleet
+    replacement or a run of `talosctl` by hand.
+
+    It is deliberately not part of `hardening`, because it is the opposite of
+    hardening. `os:admin` is root on the machine as far as Talos is concerned:
+    a pod holding it can read the machine config, certificate keys included,
+    and replace it. That is a real widening of the cluster's trust boundary,
+    and docs/hardening.md sets out what it buys and what it costs.
+  EOT
+}

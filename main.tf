@@ -27,7 +27,8 @@ module "cluster" {
   pod_cidr           = var.pod_cidr
   hardening          = var.hardening
 
-  machine_config_updates = var.machine_config_updates
+  machine_config_updates      = var.machine_config_updates
+  kubernetes_talos_api_access = var.kubernetes_talos_api_access
 
   config_output_path = var.config_output_path
 }

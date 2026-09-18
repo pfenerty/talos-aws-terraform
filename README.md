@@ -99,7 +99,10 @@ raw, pre-base64 bytes. The rendered control plane config is 11564 bytes
 before hardening and 12691 with it, against a worker's 2958; additions to the
 config patches spend what is left. 228 of those bytes are the two API server
 arguments that point service account tokens at the OIDC issuer, which are on
-the control plane only.
+the control plane only, and `kubernetes_talos_api_access` costs 187 on every
+role. With hardening, the kubelet serving certificates and the Talos API
+access all enabled, the control plane config still leaves better than 3 KB
+spare.
 
 Each `talos_machine_configuration` data source asserts the result fits, so
 this fails at plan with an error that says so. Exceeding it otherwise fails
@@ -184,6 +187,55 @@ Two things this does not cover:
   that is elastic by design, and is governed by the `NodePool`'s disruption
   budget rather than by Terraform.
 
+## Talos and Kubernetes version upgrades
+
+Neither of these is a config change, and neither is Terraform's to sequence.
+An OS upgrade has to go node by node, draining and rebooting each one and
+waiting for the cluster to come back healthy before starting the next -
+Terraform creates resources in parallel and has no way to express that order.
+There is no upgrade resource in the Talos provider to lean on either; it has
+five resources and none of them upgrades anything.
+
+So the sequencing belongs to a controller in the cluster, delivered by Flux,
+the same way Cilium's day-2 configuration and Karpenter's `NodePool` already
+are. [tuppr](https://github.com/home-operations/tuppr) reconciles a
+`TalosUpgrade` and a `KubernetesUpgrade` resource, drains, upgrades, reboots
+and verifies each node in turn, and runs one upgrade at a time cluster-wide.
+It drives each upgrade from a Job pinned away from the node being upgraded, so
+it never takes down the node it is running on.
+
+A version bump is one pull request, against this repository:
+
+```hcl
+talos_version      = "v1.14.2"
+kubernetes_version = "1.37.1"
+```
+
+Applying it does three things. The launch templates get the new AMI, so
+anything the autoscaling groups or Karpenter launch from then on boots the new
+version already. The machine config is re-rendered and applied to the running
+nodes in place, as any other config change is. And both versions are published
+into the cluster as the `cluster-versions` ConfigMap, which is what the
+upgrade resources in the Flux repository read.
+
+Flux then reconciles, the target version on the upgrade resources changes, and
+tuppr rolls the fleet. **The apply returns before any of that has happened** -
+it returns once the AMI and the ConfigMap are in place. A green pipeline means
+the intent is recorded, not that the cluster has moved; `kubectl get
+talosupgrade -w` is what says otherwise.
+
+`kubernetes_talos_api_access` has to be on for any of this: it is what lets
+tuppr's service account get a Talos API certificate. Read
+[docs/hardening.md](docs/hardening.md) before enabling it - `os:admin` is root
+on the machine as far as Talos is concerned.
+
+```hcl
+kubernetes_talos_api_access = { enabled = true }
+```
+
+Talos does not support arbitrary version jumps, and tuppr upgrades to exactly
+the version it is given without checking. Bump one minor at a time.
+
 ## Hardening
 
 `hardening` turns on Pod Security Admission at `restricted` and an API server
@@ -263,10 +315,58 @@ substitution is a plain string replace and would break the YAML indentation.
 The post-install extras are written against
 [pfenerty/flux-bootstrap](https://github.com/pfenerty/flux-bootstrap) and
 publish what it reads - the `cilium-config` and `karpenter-config` secrets,
-the `cloud-controller-manager-aws-config`, `ebs-csi-driver-aws-config` and
-`karpenter-aws-config` ConfigMaps, and `aws-loadbalancer-config`. Using them
-with a different GitOps repository means matching those names and shapes;
-[`modules/bootstrap`](modules/bootstrap) documents each one.
+the `cloud-controller-manager-aws-config`, `ebs-csi-driver-aws-config`,
+`karpenter-aws-config` and `cluster-versions` ConfigMaps, and
+`aws-loadbalancer-config`. Using them with a different GitOps repository means
+matching those names and shapes; [`modules/bootstrap`](modules/bootstrap)
+documents each one.
+
+### The upgrade resources
+
+`cluster-versions` is read differently from the rest. Everything else is
+pulled into a `HelmRelease` through `valuesFrom`, but tuppr's chart templates
+only the controller - there is no `HelmRelease` to hang a `TalosUpgrade` off -
+so the upgrade resources are plain manifests and Flux substitutes the versions
+into them:
+
+```yaml
+# clusters/<project_name>/system-upgrade/upgrades.yaml
+apiVersion: tuppr.home-operations.com/v1alpha1
+kind: TalosUpgrade
+metadata:
+  name: cluster
+spec:
+  talos:
+    version: ${talos_version}
+---
+apiVersion: tuppr.home-operations.com/v1alpha1
+kind: KubernetesUpgrade
+metadata:
+  name: kubernetes
+spec:
+  kubernetes:
+    version: ${kubernetes_version}
+```
+
+```yaml
+# the Kustomization that renders that path
+spec:
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-versions
+        optional: false
+```
+
+`postBuild` substitution is a plain string replace - which is why
+`karpenter-config` could not use it for a multi-line machine config, and why
+it is fine here. It applies to every manifest the Kustomization renders, so a
+literal `$` anywhere under that path has to be escaped as `$$`.
+
+Both keys carry a leading `v`, which is what the upgrade resources validate
+against. `talos_version` already has one; `kubernetes_version` does not, since
+the Talos machine config wants it without, so the ConfigMap normalises it -
+the value there is `v1.37.0` where the Terraform variable is `1.37.0`.
 
 Flux syncs `clusters/<project_name>`, and bootstrap writes only the
 `flux-system` directory inside it. Everything else the cluster runs is
@@ -449,6 +549,7 @@ No resources.
 | hardening | Machine config hardening, off by default because it changes what the cluster will admit. `enabled` turns on a real API server audit policy and Pod Security Admission enforcing the standard named below. It is the machine config half of a hardening baseline and not the whole of one: docs/hardening.md sets out what it covers, what Talos already does without it, and what has to be enforced in the Flux repository or the AWS layer instead. `kubelet_serving_certificates` makes the kubelet bootstrap a CA-signed serving certificate rather than self-signing one, and requires a CSR approver running in the cluster - a Flux dependency this module cannot install, and without which `kubectl logs` and `exec` stop working. | <pre>object({<br/>    enabled                        = optional(bool, false)<br/>    pod_security_enforce           = optional(string, "restricted")<br/>    pod_security_exempt_namespaces = optional(list(string), ["kube-system"])<br/>    kubelet_serving_certificates   = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | hubble\_ca\_validity\_hours | Lifetime of the self-signed Hubble trust anchor, in hours. The default of 12 is carried over from before this was configurable and is almost certainly too short for a CA that cert-manager issues from - raise it, or move the trust anchor to cert-manager entirely. | `number` | `12` | no |
 | kubernetes\_api\_allowed\_cidr | CIDR allowed to reach the Kubernetes API on port 6443. Open to the internet by default; narrow it to your own address where you can. | `string` | `"0.0.0.0/0"` | no |
+| kubernetes\_talos\_api\_access | Lets service accounts in the named Kubernetes namespaces obtain Talos API<br/>credentials carrying the named roles. Off by default.<br/><br/>This is how an in-cluster upgrade controller - tuppr, in the Flux bootstrap<br/>repository - calls the Talos upgrade API on each node, which is what makes<br/>a Talos version bump a change to a manifest rather than a fleet<br/>replacement or a run of `talosctl` by hand.<br/><br/>It is deliberately not part of `hardening`, because it is the opposite of<br/>hardening. `os:admin` is root on the machine as far as Talos is concerned:<br/>a pod holding it can read the machine config, certificate keys included,<br/>and replace it. That is a real widening of the cluster's trust boundary,<br/>and docs/hardening.md sets out what it buys and what it costs. | <pre>object({<br/>    enabled    = optional(bool, false)<br/>    roles      = optional(list(string), ["os:admin"])<br/>    namespaces = optional(list(string), ["system-upgrade"])<br/>  })</pre> | `{}` | no |
 | kubernetes\_version | Kubernetes version | `string` | `"1.37.0"` | no |
 | machine\_config\_updates | How a machine config change reaches nodes that are already running. The<br/>machine config is launch template user data, which Talos reads once at<br/>first boot, so on its own it only ever reaches a node by replacing it.<br/><br/>`apply_to_running_nodes` applies the rendered config to the existing<br/>control plane and baseline worker nodes over the Talos API, which is what<br/>`talosctl apply-config` does, so a config edit reconfigures the cluster<br/>rather than rebuilding it. User data is still what a newly launched node<br/>reads, so nodes the autoscaling groups or Karpenter bring up later come<br/>up configured without anything to run by hand.<br/><br/>`apply_mode` is how Talos applies it. The default dry-runs the change and<br/>stages it for the next boot if it would need a reboot, applying it<br/>immediately otherwise - which is what keeps a config edit from rebooting<br/>every control plane node at once, since Terraform has no way to serialise<br/>that. `auto` reboots where Talos says a reboot is required.<br/><br/>`instance_refresh` rolls both autoscaling groups whenever their launch<br/>template changes, which is the old behaviour and the only way an AMI<br/>change reaches existing nodes. Off by default: with it on, a one-line<br/>config edit replaces every node in the cluster. | <pre>object({<br/>    apply_to_running_nodes = optional(bool, true)<br/>    apply_mode             = optional(string, "staged_if_needing_reboot")<br/>    instance_refresh       = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | pod\_cidr | Pod subnet CIDR. Set on the Talos machine config and reused as Cilium's strict-mode egress CIDR so the two cannot drift apart. | `string` | `"10.244.0.0/16"` | no |

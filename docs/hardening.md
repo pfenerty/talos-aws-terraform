@@ -393,6 +393,43 @@ the 22 rules above, and an assessor is entitled to ask about both:
   it is rotated - is the compensating control that carries the weight the file
   permission rules were carrying.
 
+### A third, if `kubernetes_talos_api_access` is enabled
+
+`kubernetes_talos_api_access` sets `machine.features.kubernetesTalosAPIAccess`,
+which lets Talos issue a Talos API client certificate to a service account in
+a named namespace, carrying named roles. The default shape is `os:admin` for
+`system-upgrade`, because that is what an in-cluster upgrade controller needs
+in order to call the upgrade API on each node.
+
+Read against the paragraph above, that is the whole of it: **a pod in that
+namespace holds the credential the residual-risk argument is built on.** It
+can read every file the 22 uncheckable rules are about, the cluster CA key
+included, and it can replace the machine configuration on any node. An
+assessor who accepts "the control is access to the Talos API" will ask what is
+running in `system-upgrade`, and the honest answer has to cover the
+controller's image provenance, who can create workloads in that namespace, and
+who can write to the Flux repository that populates it - because that is now a
+path to `os:admin` on every machine.
+
+It is off by default and it is not part of `hardening`. Turning it on is a
+deliberate widening, and the reason to accept it is that the alternatives are
+worse rather than that it is cheap:
+
+* Without it, a Talos version upgrade reaches running nodes only by replacing
+  them - an etcd membership change per control plane node to change an OS
+  image - or by a human running `talosctl upgrade` against each node with the
+  administrative `talosconfig`, which is the same `os:admin` credential
+  handled less carefully and with no audit trail beyond someone's shell
+  history.
+* With it, the credential is scoped to one namespace and one set of roles,
+  issued by Talos rather than copied around, and the thing using it is
+  reconciling a manifest that went through review.
+
+Narrow it where the deployment allows. `roles` and `namespaces` are both
+configurable: a controller that only ever calls the upgrade API does not
+necessarily need `os:admin` on a cluster where a narrower role covers it, and
+the namespace should be one nothing else is deployed into.
+
 ## How the patches are built
 
 `modules/cluster/talos/config/main.tf` builds one patch per concern and lets

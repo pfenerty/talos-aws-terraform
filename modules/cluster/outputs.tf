@@ -84,9 +84,17 @@ output "bootstrap_inputs" {
   description = "Cluster facts consumed by the bootstrap module. Pass straight to its `cluster` variable."
   sensitive   = true
   value = {
-    project_name                    = var.project_name
-    region                          = var.region
-    pod_cidr                        = var.pod_cidr
+    project_name = var.project_name
+    region       = var.region
+    pod_cidr     = var.pod_cidr
+
+    # Published into the cluster for the upgrade controller to read. These are
+    # the same values that select the AMI and render the machine config, so
+    # the controller and the launch templates cannot end up naming different
+    # versions - which they would if the Flux repository restated them.
+    talos_version      = var.talos_version
+    kubernetes_version = var.kubernetes_version
+
     cluster_endpoint                = "https://${module.networking.load_balancer_dns}:443"
     load_balancer_dns               = module.networking.load_balancer_dns
     client_configuration            = module.talos_config.client_configuration

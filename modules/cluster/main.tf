@@ -41,7 +41,9 @@ locals {
 }
 
 module "talos_config" {
-  source                 = "./talos/config"
+  source                      = "./talos/config"
+  kubernetes_talos_api_access = var.kubernetes_talos_api_access
+
   project_name           = var.project_name
   load_balancer_dns      = module.networking.load_balancer_dns
   service_account_issuer = local.oidc_issuer_url
