@@ -62,6 +62,20 @@ locals {
       }
     }
     machine = {
+      # `talosctl gen config` writes the installer image of the machinery that
+      # generated the config - 1.13.0, the version terraform-provider-talos
+      # 0.11.0 vendors - regardless of what var.talos_version says the nodes
+      # will run. It is inert for as long as a node only ever boots from the
+      # AMI, which is why it went unnoticed, and it is the wrong installer the
+      # moment anything upgrades a node in place: the node would install 1.13.0
+      # over whatever it was running.
+      #
+      # Same length as the string it replaces, so it costs nothing against the
+      # 16 KB user data ceiling.
+      install = {
+        image = "ghcr.io/siderolabs/installer:${var.talos_version}"
+      }
+
       kubelet = {
         extraArgs = {
           cloud-provider = "external"
