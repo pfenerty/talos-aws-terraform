@@ -66,6 +66,40 @@ Two consequences worth stating plainly:
   is the one exception, and the only reason `hardening` has a worker half at
   all.
 
+## Cluster identity, which is not behind the variable
+
+Two things are always on, because both would be pointless as options and
+neither can be turned on later without replacing every node.
+
+**Nothing in the cluster holds an AWS key pair.** The cloud controller
+manager, the EBS CSI driver and Karpenter each assume an IAM role by
+presenting a service account token the cluster signed, against an OpenID
+Connect provider registered from the cluster's own discovery documents.
+Each role's trust policy pins `sub` to a single service account and `aud` to
+`sts.amazonaws.com`, both with `StringEquals`. The API server flags that make
+this possible - `service-account-issuer` and `api-audiences` - are in the
+machine config, which is why this is not a switch: changing the issuer on a
+running cluster invalidates every token in flight.
+
+**A pod cannot reach the instance metadata service.** Both launch templates
+set an IMDS hop limit of 1, so a packet from a pod's network namespace is
+dropped before `169.254.169.254`. This is what makes the roles above worth
+scoping: a role restricted to one service account is no restriction at all
+while any pod can ask metadata for the node's credentials instead. The
+control plane role is empty in consequence - the cloud controller manager was
+its only consumer - and the worker role carries nothing but ECR pull and
+`ec2:Describe*`, both used by the kubelet on the host.
+
+The cost is a constraint on what can be deployed: nothing in a pod may read
+instance metadata. The two components that used to are configured not to, in
+the Flux bootstrap repository. A workload added later that expects IMDS will
+not work, and the failure will look like a credential problem rather than a
+network one.
+
+STIG has no rule for either. They are here because the alternative - long-lived
+keys in Terraform state and in Kubernetes secrets, and a metadata endpoint any
+pod can read - is the more likely way this cluster would actually be lost.
+
 ## What `hardening` adds
 
 Off by default, because both changes can stop workloads being admitted or
@@ -189,7 +223,7 @@ description of what it does.
 | V-242437 (part) | Per-namespace Pod Security Admission labels |
 | V-242442 | Old components removed after upgrades |
 | V-242443 | Components patched per IAVM. Renovate covers the version bumps in this repository; landing them on a cluster is Flux's |
-| V-274883 | Sensitive data held in Secrets or an external store |
+| V-274883 | Sensitive data held in Secrets or an external store. The AWS half is covered: the components that talk to AWS assume roles and hold no keys |
 | V-274884 | Secret access restricted to need-to-know via RBAC |
 
 **Named dependency: a kubelet-serving CSR approver.** This one is not a rule of

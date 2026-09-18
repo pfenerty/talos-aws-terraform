@@ -95,5 +95,27 @@ output "bootstrap_inputs" {
     worker_iam_role_arn             = module.compute.worker_iam_role_arn
     worker_ami_id                   = module.compute.talos_ami_id
     karpenter_worker_machine_config = module.talos_config.karpenter_worker_machine_config
+
+    # IRSA. The bucket is created by the bootstrap module, but named here:
+    # the issuer URL is in the machine config, which is rendered here.
+    oidc_bucket     = local.oidc_bucket
+    oidc_issuer_url = local.oidc_issuer_url
+
+    # The cluster's own network facts, which the cloud controller manager
+    # needs in its cloud config once it can no longer read them from the
+    # instance metadata service.
+    vpc_id    = module.networking.vpc_id
+    subnet_id = module.networking.public_subnets[0]
+
+    # Admin credentials, for reading the API server's OIDC discovery
+    # documents over mutual TLS.
+    kubernetes_client_configuration = local.kubernetes_client_configuration
+
+    tags = local.tags
   }
+}
+
+output "oidc_issuer_url" {
+  value       = local.oidc_issuer_url
+  description = "URL the API server names as the issuer of its service account tokens, and where the bootstrap module publishes the OIDC discovery documents. Registered with AWS as an IAM identity provider."
 }

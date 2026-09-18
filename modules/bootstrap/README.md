@@ -17,8 +17,12 @@ Order matters here and is the reason this module exists separately:
 3. **Flux**, whose controllers are ordinary pod-network Deployments and
    whose source-controller needs CoreDNS to resolve the git remote. Flux
    cannot be bootstrapped before step 1.
-4. **The extras**, which publish IAM credentials into `flux-system` secrets
-   for the bootstrap repository to consume.
+4. **The cluster's OIDC identity provider**, which publishes the API server's
+   discovery documents to S3 and registers them with IAM. Everything that
+   follows authenticates to AWS by assuming a role with a service account
+   token, so this has to exist before any of it starts.
+5. **The extras**, which publish roles and configuration into Kubernetes for
+   the bootstrap repository to consume.
 
 ## Cilium ownership
 
@@ -41,13 +45,21 @@ This module is written against
 [pfenerty/flux-bootstrap](https://github.com/pfenerty/flux-bootstrap) and
 publishes the values that repository reads:
 
-| Secret | Namespace | Written when |
+| Object | Namespace | Written when |
 |--------|-----------|--------------|
-| `cilium-config` | `flux-system` | Flux enabled. Carries `pod-cidr`, which the Cilium HelmRelease needs as its strict-mode egress CIDR - it must match the pod CIDR the machine configs were generated with. |
-| `karpenter-config` | `flux-system` | `extras.karpenter`. Read by `valuesFrom`, which resolves secrets in the HelmRelease's namespace. |
-| `karpenter-aws-credentials` | `kube-system` | `extras.karpenter`. The same key pair again, shaped as environment variables, because the chart takes credentials only through `controller.envFrom` - which resolves in the pod's namespace, not the HelmRelease's. |
-| `aws-secret` | `kube-system` | `extras.ebs` |
-| `aws-loadbalancer-config` | `flux-system` | Flux enabled. Nothing in the bootstrap repository reads it today. |
+| `cilium-config` secret | `flux-system` | Flux enabled. Carries `pod-cidr`, which the Cilium HelmRelease needs as its strict-mode egress CIDR - it must match the pod CIDR the machine configs were generated with. |
+| `karpenter-config` secret | `flux-system` | `extras.karpenter`. Read by `valuesFrom`, which resolves secrets in the HelmRelease's namespace. |
+| `cloud-controller-manager-aws-config` ConfigMap | `kube-system` | Flux enabled. `cloud.conf` for `--cloud-config`, and a shared AWS config file naming the role to assume. |
+| `ebs-csi-driver-aws-config` ConfigMap | `kube-system` | `extras.ebs`. `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_REGION`. |
+| `karpenter-aws-config` ConfigMap | `kube-system` | `extras.karpenter`. The same three variables. |
+| `aws-loadbalancer-config` secret | `flux-system` | Flux enabled. Nothing in the bootstrap repository reads it today. |
+
+None of these carries an AWS credential. Each component assumes a role with a
+projected service account token, mounted at `/var/run/secrets/aws/token` -
+a path that appears both in the config written here and in the volume mount
+in the bootstrap repository, and that nothing checks the agreement of. A
+mismatch surfaces as an `AssumeRoleWithWebIdentity` failure in the workload's
+logs, not as an error here.
 
 Flux syncs `clusters/<project_name>`, and `flux_bootstrap_git` writes only
 `flux-system` inside it. The Kustomizations that describe what the cluster runs
@@ -70,6 +82,7 @@ Flux. Remove the patch and every Flux pod stays Pending forever.
 | aws | ~> 6.65 |
 | flux | ~> 1.9 |
 | helm | ~> 3.3 |
+| http | ~> 3.5 |
 | kubernetes | ~> 3.2 |
 | talos | ~> 0.11 |
 | tls | ~> 4.4 |
@@ -78,18 +91,20 @@ Flux. Remove the patch and every Flux pod stays Pending forever.
 
 | Name | Version |
 |------|---------|
-| aws | ~> 6.65 |
-| flux | ~> 1.9 |
-| kubernetes | ~> 3.2 |
-| talos | ~> 0.11 |
+| aws | 6.65.0 |
+| flux | 1.9.5 |
+| kubernetes | 3.2.1 |
+| talos | 0.11.0 |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
 | cilium | ./cilium | n/a |
+| cloud\_controller | ./cloud-controller | n/a |
 | ebs | ./ebs | n/a |
 | karpenter | ./karpenter | n/a |
+| oidc | ./oidc | n/a |
 
 ## Resources
 
@@ -106,7 +121,7 @@ Flux. Remove the patch and every Flux pod stays Pending forever.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | cilium\_bootstrap\_version | Cilium chart version installed to get the cluster to Ready. Changing it affects new clusters only: on an existing cluster Cilium belongs to Flux, and this module deliberately stops reconciling the release after creating it. | `string` | `"1.20.2"` | no |
-| cluster | Everything this module needs to know about the cluster it is bootstrapping. Pass the cluster module's bootstrap\_inputs output straight through. | <pre>object({<br/>    project_name      = string<br/>    region            = string<br/>    pod_cidr          = string<br/>    cluster_endpoint  = string<br/>    load_balancer_dns = string<br/>    client_configuration = object({<br/>      ca_certificate     = string<br/>      client_certificate = string<br/>      client_key         = string<br/>    })<br/>    control_plane_public_ips        = list(string)<br/>    control_plane_private_ips       = list(string)<br/>    worker_private_ips              = list(string)<br/>    node_count                      = number<br/>    worker_instance_profile_name    = string<br/>    worker_iam_role_arn             = string<br/>    worker_ami_id                   = string<br/>    karpenter_worker_machine_config = string<br/>  })</pre> | n/a | yes |
+| cluster | Everything this module needs to know about the cluster it is bootstrapping. Pass the cluster module's bootstrap\_inputs output straight through. | <pre>object({<br/>    project_name      = string<br/>    region            = string<br/>    pod_cidr          = string<br/>    cluster_endpoint  = string<br/>    load_balancer_dns = string<br/>    client_configuration = object({<br/>      ca_certificate     = string<br/>      client_certificate = string<br/>      client_key         = string<br/>    })<br/>    control_plane_public_ips        = list(string)<br/>    control_plane_private_ips       = list(string)<br/>    worker_private_ips              = list(string)<br/>    node_count                      = number<br/>    worker_instance_profile_name    = string<br/>    worker_iam_role_arn             = string<br/>    worker_ami_id                   = string<br/>    karpenter_worker_machine_config = string<br/><br/>    # IRSA. The bucket is created here but named by the cluster module,<br/>    # because the issuer URL built from it is in the API server's machine<br/>    # config, and the cluster module is what renders that.<br/>    oidc_bucket     = string<br/>    oidc_issuer_url = string<br/><br/>    # Facts the cloud controller manager is given in its cloud config, now<br/>    # that a pod cannot read them from the instance metadata service.<br/>    vpc_id    = string<br/>    subnet_id = string<br/><br/>    # Admin credentials for the Kubernetes API, used to read the cluster's<br/>    # own OIDC discovery documents. The endpoints are not anonymous.<br/>    kubernetes_client_configuration = object({<br/>      ca_certificate     = string<br/>      client_certificate = string<br/>      client_key         = string<br/>    })<br/><br/>    tags = map(string)<br/>  })</pre> | n/a | yes |
 | cluster\_health\_timeout | How long to wait for the cluster to report healthy before giving up. This is a ceiling, not a delay: the check returns as soon as the cluster is ready. Terraform re-reads the health check on refresh, so this also bounds how long a plan blocks when the cluster is unreachable. | `string` | `"10m"` | no |
 | extras | Terraform-managed AWS resources that the Flux bootstrap repository consumes. They publish their credentials into flux-system secrets, so they require Flux. | <pre>object({<br/>    ebs       = bool<br/>    karpenter = bool<br/>  })</pre> | <pre>{<br/>  "ebs": false,<br/>  "karpenter": false<br/>}</pre> | no |
 | flux | Flux bootstrap. Disabled by default; when enabled, Flux is bootstrapped from the git repository described here and takes ownership of everything in the cluster, Cilium's day-2 configuration included. | <pre>object({<br/>    enabled    = bool<br/>    git_url    = string<br/>    git_branch = string<br/>    ssh_key    = string<br/>  })</pre> | <pre>{<br/>  "enabled": false,<br/>  "git_branch": "",<br/>  "git_url": "",<br/>  "ssh_key": ""<br/>}</pre> | no |

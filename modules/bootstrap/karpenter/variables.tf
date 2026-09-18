@@ -38,3 +38,22 @@ variable "node_user_data" {
   description = "Talos worker machine config used as the EC2NodeClass user data."
   sensitive   = true
 }
+
+variable "token_path" {
+  type        = string
+  description = "Path the projected service account token is mounted at in the controller's pod. Must match the volume mount in the Flux bootstrap repository."
+}
+
+variable "oidc" {
+  description = "The cluster's IAM identity provider. Pass the oidc module's outputs."
+  type = object({
+    provider_arn = string
+    issuer_host  = string
+  })
+}
+
+variable "tags" {
+  type        = map(string)
+  default     = {}
+  description = "Tags applied to every resource this module creates."
+}

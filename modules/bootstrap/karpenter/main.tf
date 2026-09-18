@@ -7,6 +7,8 @@ resource "aws_sqs_queue" "interruption" {
   name                      = "${var.project_name}-karpenter"
   message_retention_seconds = 300
   sqs_managed_sse_enabled   = true
+
+  tags = var.tags
 }
 
 resource "aws_sqs_queue_policy" "interruption" {
@@ -90,6 +92,8 @@ resource "aws_cloudwatch_event_rule" "interruption" {
     source        = [each.value.source]
     "detail-type" = [each.value.detail_type]
   })
+
+  tags = var.tags
 }
 
 resource "aws_cloudwatch_event_target" "interruption" {
@@ -99,14 +103,17 @@ resource "aws_cloudwatch_event_target" "interruption" {
   arn  = aws_sqs_queue.interruption.arn
 }
 
-# There is no OIDC provider in front of this cluster, so the controller
-# authenticates with a static key pair the same way the other extras do.
-resource "aws_iam_user" "this" {
-  name = "${var.project_name}-karpenter"
-}
+# Karpenter's identity: a role it assumes with its own service account token.
+#
+# The upstream controller policy is unchanged by that - it is the same set of
+# EC2, pricing and SQS grants either way - but the principal is now a role
+# scoped to one service account rather than an IAM user with a key pair that
+# lived in Terraform state and in a Kubernetes secret.
+module "role" {
+  source = "../irsa-role"
 
-resource "aws_iam_policy" "this" {
-  name = "${var.project_name}-karpenter"
+  name            = "${var.project_name}-karpenter"
+  service_account = "karpenter"
   policy = templatefile("${path.module}/iam.json.tmpl", {
     partition     = data.aws_partition.current.partition,
     region        = var.region,
@@ -115,15 +122,8 @@ resource "aws_iam_policy" "this" {
     node_role_arn = var.node_iam_role_arn,
     queue_arn     = aws_sqs_queue.interruption.arn
   })
-}
-
-resource "aws_iam_user_policy_attachment" "this" {
-  user       = aws_iam_user.this.name
-  policy_arn = aws_iam_policy.this.arn
-}
-
-resource "aws_iam_access_key" "this" {
-  user = aws_iam_user.this.name
+  oidc = var.oidc
+  tags = var.tags
 }
 
 # Consumed by the Karpenter HelmRelease, EC2NodeClass and NodePool in the Flux
@@ -131,6 +131,9 @@ resource "aws_iam_access_key" "this" {
 # boot from; it is multi-line, so it has to reach the EC2NodeClass through a
 # HelmRelease valuesFrom targetPath rather than Flux postBuild substitution,
 # which is a plain string replace and would break the YAML indentation.
+#
+# In flux-system rather than kube-system because valuesFrom resolves secrets
+# in the HelmRelease's namespace.
 resource "kubernetes_secret_v1" "this" {
   metadata {
     name      = "karpenter-config"
@@ -138,9 +141,6 @@ resource "kubernetes_secret_v1" "this" {
   }
 
   data = {
-    access-key-id     = aws_iam_access_key.this.id
-    secret-access-key = aws_iam_access_key.this.secret
-
     cluster-name       = var.project_name
     cluster-endpoint   = var.cluster_endpoint
     region             = var.region
@@ -155,26 +155,19 @@ resource "kubernetes_secret_v1" "this" {
   }
 }
 
-# The same credentials again, in the namespace the controller runs in and
-# shaped as environment variables, because that is the only way the Karpenter
-# chart will take them. Its `settings` are ordinary Helm values, so the secret
-# above reaches them through the HelmRelease's valuesFrom - but credentials
-# are not chart values at all: the controller reads them from its own
-# environment, and the only hook for that is `controller.envFrom`, which
-# resolves the secret in the pod's namespace rather than the HelmRelease's.
-#
-# Hence two secrets rather than one. The alternative is granting the worker
-# instance profile the Karpenter policy and letting the controller pick it up
-# from IMDS, which would hand the same permissions to every pod on the node.
-resource "kubernetes_secret_v1" "credentials" {
+# Read by the controller through `envFrom`. Separate from the secret above,
+# and in the controller's own namespace, because an environment variable has
+# to come from an object in the pod's namespace - `valuesFrom` resolves in the
+# HelmRelease's.
+resource "kubernetes_config_map_v1" "this" {
   metadata {
-    name      = "karpenter-aws-credentials"
+    name      = "karpenter-aws-config"
     namespace = "kube-system"
   }
 
   data = {
-    AWS_ACCESS_KEY_ID     = aws_iam_access_key.this.id
-    AWS_SECRET_ACCESS_KEY = aws_iam_access_key.this.secret
-    AWS_REGION            = var.region
+    AWS_REGION                  = var.region
+    AWS_ROLE_ARN                = module.role.role_arn
+    AWS_WEB_IDENTITY_TOKEN_FILE = var.token_path
   }
 }

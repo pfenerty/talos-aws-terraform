@@ -44,6 +44,7 @@ No modules.
 | load\_balancer\_dns | DNS name of the control plane load balancer, used as the cluster endpoint. | `string` | n/a | yes |
 | pod\_cidr | Pod subnet CIDR | `string` | n/a | yes |
 | project\_name | Project name, used as the Talos cluster name. | `string` | n/a | yes |
+| service\_account\_issuer | URL the API server names as the issuer of service account tokens, and where its OpenID Connect discovery documents are published. Set to the OIDC bucket's HTTPS URL so that AWS can verify the tokens IRSA trades for role credentials. Changing it on a running cluster invalidates every service account token until the kubelets refresh them. | `string` | n/a | yes |
 | talos\_version | Talos Linux version the machine secrets and configs are generated for. | `string` | n/a | yes |
 
 ## Outputs

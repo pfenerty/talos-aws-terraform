@@ -53,3 +53,13 @@ variable "hardening" {
     error_message = "hardening.kubelet_serving_certificates requires hardening.enabled: the sub-settings only apply when hardening is on, and silently ignoring it would be worse than refusing it."
   }
 }
+
+variable "service_account_issuer" {
+  type        = string
+  description = "URL the API server names as the issuer of service account tokens, and where its OpenID Connect discovery documents are published. Set to the OIDC bucket's HTTPS URL so that AWS can verify the tokens IRSA trades for role credentials. Changing it on a running cluster invalidates every service account token until the kubelets refresh them."
+
+  validation {
+    condition     = startswith(var.service_account_issuer, "https://") && !endswith(var.service_account_issuer, "/")
+    error_message = "service_account_issuer must be an https URL with no trailing slash: it has to match the iss claim in the tokens byte for byte, and the discovery document is served from it by appending a path."
+  }
+}
