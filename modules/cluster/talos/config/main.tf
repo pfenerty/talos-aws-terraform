@@ -137,6 +137,31 @@ locals {
     }
   }
 
+  # How anything running inside the cluster reaches the Talos API. Talos will
+  # issue a client certificate to a service account in one of the namespaces
+  # named here, carrying the roles named here, which is what an in-cluster
+  # upgrade controller needs in order to call the upgrade API on each node.
+  #
+  # Off by default, and not part of `hardening`, because it is the opposite of
+  # hardening: os:admin is root on the machine as far as Talos is concerned,
+  # and a pod holding it can read the machine config - certificate keys and
+  # all - and replace it. docs/hardening.md sets out the trade.
+  #
+  # The generated config does not carry machine.features.kubernetesTalosAPIAccess
+  # at all, so this creates the whole subtree and rule 2 above does not bite:
+  # there is no generated list for allowedRoles to append to. Costs 187 bytes.
+  kubernetes_talos_api_access_patch = {
+    machine = {
+      features = {
+        kubernetesTalosAPIAccess = {
+          enabled                     = true
+          allowedRoles                = var.kubernetes_talos_api_access.roles
+          allowedKubernetesNamespaces = var.kubernetes_talos_api_access.namespaces
+        }
+      }
+    }
+  }
+
   # `talosctl gen config` writes a PodSecurity entry into
   # cluster.apiServer.admissionControl, and that field is a list, so rule 2
   # above applies: setting it directly would leave the config carrying two
@@ -303,16 +328,25 @@ locals {
     yamlencode(local.hardening_kubelet_serving_control_plane_patch),
   ] : []
 
+  # Every role. An upgrade controller that can reach the control plane but not
+  # the workers can only do half the fleet, and the half it cannot do fails
+  # rather than being skipped.
+  kubernetes_talos_api_access_patches = var.kubernetes_talos_api_access.enabled ? [
+    yamlencode(local.kubernetes_talos_api_access_patch),
+  ] : []
+
   control_plane_patches = concat(
     [yamlencode(local.cluster_patch), yamlencode(local.control_plane_patch)],
     local.hardening_control_plane_patches,
     local.kubelet_serving_patches,
     local.kubelet_serving_control_plane_patches,
+    local.kubernetes_talos_api_access_patches,
   )
 
   worker_patches = concat(
     [yamlencode(local.cluster_patch)],
     local.kubelet_serving_patches,
+    local.kubernetes_talos_api_access_patches,
   )
 
   karpenter_worker_patches = concat(

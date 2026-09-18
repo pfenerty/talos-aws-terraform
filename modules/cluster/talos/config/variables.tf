@@ -63,3 +63,18 @@ variable "service_account_issuer" {
     error_message = "service_account_issuer must be an https URL with no trailing slash: it has to match the iss claim in the tokens byte for byte, and the discovery document is served from it by appending a path."
   }
 }
+
+variable "kubernetes_talos_api_access" {
+  type = object({
+    enabled    = optional(bool, false)
+    roles      = optional(list(string), ["os:admin"])
+    namespaces = optional(list(string), ["system-upgrade"])
+  })
+  default     = {}
+  description = "Lets service accounts in the named namespaces obtain Talos API credentials with the named roles. Off by default. This is how an in-cluster upgrade controller reaches the Talos API, and it is a real widening of the cluster's trust boundary: os:admin can read and replace the machine config. See docs/hardening.md."
+
+  validation {
+    condition     = !var.kubernetes_talos_api_access.enabled || (length(var.kubernetes_talos_api_access.roles) > 0 && length(var.kubernetes_talos_api_access.namespaces) > 0)
+    error_message = "kubernetes_talos_api_access.roles and .namespaces must both be non-empty when enabled, or the feature is turned on while granting nothing."
+  }
+}

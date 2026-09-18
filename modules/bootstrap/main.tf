@@ -160,6 +160,47 @@ resource "kubernetes_secret_v1" "aws_lb_config" {
   }
 }
 
+# The versions the cluster is meant to be running, for the upgrade controller
+# in the Flux bootstrap repository to converge on.
+#
+# Read differently from every other object here. The others are pulled into a
+# HelmRelease through valuesFrom, but tuppr's chart templates only the
+# controller - there is no HelmRelease to hang a TalosUpgrade off - so the
+# upgrade resources are plain manifests in the repository and Flux substitutes
+# these values into them with postBuild.substituteFrom. That is a plain string
+# replace, which is exactly why karpenter-config could not use it for a
+# multi-line machine config; a version is a single-line scalar, so it can.
+#
+# A ConfigMap rather than a Secret because a version number is not a
+# credential, and substituteFrom reads either.
+#
+# Terraform owns these values because var.talos_version already has to exist
+# here to select the AMI. Restating them in the Flux repository would mean two
+# sources of truth for one upgrade, and a window where the version the nodes
+# boot on and the version the controller converges to disagree.
+resource "kubernetes_config_map_v1" "cluster_versions" {
+  count = var.flux.enabled ? 1 : 0
+
+  depends_on = [flux_bootstrap_git.this]
+
+  metadata {
+    name      = "cluster-versions"
+    namespace = "flux-system"
+  }
+
+  # Both carry a leading `v`, because both upgrade resources validate their
+  # version against `^v[0-9]+\.[0-9]+\.[0-9]+...` and reject anything else.
+  # talos_version already has one; kubernetes_version does not, because the
+  # Talos machine config wants it without. Normalising here rather than in the
+  # manifest keeps the two substitutions symmetric and removes the one place
+  # the `v` could be forgotten - the admission webhook would catch it, but as
+  # a rejected manifest in a Flux reconcile rather than at plan.
+  data = {
+    talos_version      = startswith(var.cluster.talos_version, "v") ? var.cluster.talos_version : "v${var.cluster.talos_version}"
+    kubernetes_version = startswith(var.cluster.kubernetes_version, "v") ? var.cluster.kubernetes_version : "v${var.cluster.kubernetes_version}"
+  }
+}
+
 # Values the Flux bootstrap repository's Cilium HelmRelease reads through
 # valuesFrom, in the same shape as karpenter-config. Flux owns Cilium's
 # day-2 configuration, so it needs the pod CIDR that the Talos machine
