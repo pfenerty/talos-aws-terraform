@@ -55,19 +55,22 @@ output "client_configuration" {
   description = "Talos client certificates, for the Talos provider's own data sources and resources."
 }
 
+# Ordered by instance ID, like everything else derived from the instance data
+# sources, so that a refresh that returns the same nodes in a different order
+# does not show up as a change.
 output "control_plane_public_ips" {
-  value       = data.aws_instances.control_plane_instances.public_ips
-  description = "Public addresses of the control plane nodes. The Talos API listens here; node addresses themselves are private."
+  value       = local.control_plane_public_ips
+  description = "Public addresses of the control plane nodes, ordered by instance ID. The Talos API listens here; node addresses themselves are private."
 }
 
 output "control_plane_private_ips" {
-  value       = data.aws_instances.control_plane_instances.private_ips
-  description = "Private addresses of the control plane nodes, which is how Talos identifies them."
+  value       = local.control_plane_private_ips
+  description = "Private addresses of the control plane nodes, ordered by instance ID, which is how Talos identifies them."
 }
 
 output "worker_private_ips" {
-  value       = data.aws_instances.worker_instances.private_ips
-  description = "Private addresses of the baseline worker nodes."
+  value       = local.worker_private_ips
+  description = "Private addresses of the baseline worker nodes, ordered by instance ID."
 }
 
 output "node_count" {
@@ -87,9 +90,9 @@ output "bootstrap_inputs" {
     cluster_endpoint                = "https://${module.networking.load_balancer_dns}:443"
     load_balancer_dns               = module.networking.load_balancer_dns
     client_configuration            = module.talos_config.client_configuration
-    control_plane_public_ips        = data.aws_instances.control_plane_instances.public_ips
-    control_plane_private_ips       = data.aws_instances.control_plane_instances.private_ips
-    worker_private_ips              = data.aws_instances.worker_instances.private_ips
+    control_plane_public_ips        = local.control_plane_public_ips
+    control_plane_private_ips       = local.control_plane_private_ips
+    worker_private_ips              = local.worker_private_ips
     node_count                      = var.control_plane_nodes + var.worker_nodes_min
     worker_instance_profile_name    = module.compute.worker_instance_profile_name
     worker_iam_role_arn             = module.compute.worker_iam_role_arn

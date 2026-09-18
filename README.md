@@ -112,6 +112,78 @@ is `metal`-only. This is also why Cilium is a Helm release rather than a Talos
 inline manifest: rendered with the values above it is about 68 KB, and 18 KB
 gzipped.
 
+## Machine config updates
+
+Talos reads user data once, at first boot. Afterwards a machine's
+configuration lives in its `STATE` partition, and a running node never learns
+that Terraform rendered something different. Left at that, the only way a
+config edit reaches the fleet is by replacing every node in it - which, at
+`control_plane_nodes = 1`, is an API server outage to deliver a one-line
+change.
+
+So the config is delivered twice, over two channels, because neither one
+covers both populations of node:
+
+* **Launch template user data**, which is what a node reads at boot. This is
+  the only channel a node the autoscaling group brings up on its own ever
+  sees - a scale-out, a replacement after a failed health check, a Karpenter
+  node - and it is why a new node joins the cluster correctly with nothing to
+  run by hand.
+* **`talos_machine_configuration_apply` against the running nodes**, which is
+  what `talosctl apply-config` does and what Talos expects. This is how an
+  edit reaches the machines that are already up.
+
+Both carry the same rendered string, so the two cannot disagree. `plan` shows
+the second channel as a change to the apply resources rather than as a
+replacement of the autoscaling groups' instances.
+
+The knob is `machine_config_updates`:
+
+```hcl
+machine_config_updates = {
+  apply_to_running_nodes = true                       # the second channel
+  apply_mode             = "staged_if_needing_reboot" # how Talos applies it
+  instance_refresh       = false                      # roll the ASGs instead
+}
+```
+
+`apply_mode` defaults to `staged_if_needing_reboot`: Talos dry-runs the change
+and, if applying it would need a reboot, stages it for the next boot instead
+of taking the node down. Most of what this module puts in the machine config
+does not need one - API server arguments, admission control, the audit policy
+and kubelet settings all land live, restarting only the affected service. The
+reason for the default is that Terraform creates the apply resources in
+parallel and has no way to serialise them, so `auto` on a reboot-requiring
+change reboots every control plane node at once and takes etcd's quorum with
+it.
+
+A staged change is on the node but not in effect. `terraform output` does not
+surface which nodes staged, but the apply resources record it:
+
+```sh
+terraform state show 'module.cluster.module.talos_apply_control_plane[0].talos_machine_configuration_apply.this[0]'
+```
+
+Look at `resolved_apply_mode`. Where it reads `staged`, reboot the nodes one
+at a time to pick the change up - `talosctl -n <private ip> reboot`, waiting
+for the cluster to go healthy between each.
+
+Two things this does not cover:
+
+* **AMI changes.** Bumping `talos_version` writes a new launch template, and
+  there is no in-place Talos upgrade path in this module, so new nodes boot
+  the new image while existing ones stay on the old one. Roll them
+  deliberately with `aws autoscaling start-instance-refresh`, or set
+  `instance_refresh = true` to have Terraform roll both groups on every
+  launch template change - which is the pre-existing behaviour, and replaces
+  every node on a config edit as well.
+* **Karpenter nodes.** They are not in either autoscaling group and Terraform
+  does not know their addresses. Their config comes from `node-user-data` in
+  the `karpenter-config` secret, and changing it is drift as far as Karpenter
+  is concerned, so it replaces them - which is the right answer for capacity
+  that is elastic by design, and is governed by the `NodePool`'s disruption
+  budget rather than by Terraform.
+
 ## Hardening
 
 `hardening` turns on Pod Security Admission at `restricted` and an API server
@@ -122,9 +194,10 @@ Most of what a Kubernetes benchmark asks for is already how Talos generates
 and runs the cluster, so the variable is deliberately small - and it is the
 machine config half of a baseline, not a baseline. [docs/hardening.md](docs/hardening.md)
 sets out what Talos already covers, what has to be enforced in the Flux
-repository or the AWS layer instead, how the config patches compose, and a
-known limitation that has no good answer yet: a machine config change does
-not reconfigure running nodes, it replaces them.
+repository or the AWS layer instead, and how the config patches compose.
+Turning `hardening` on for a cluster that is already running reconfigures its
+nodes rather than replacing them; see [Machine config updates](#machine-config-updates)
+for how, and for the one case that still needs a reboot.
 
 `hardening.kubelet_serving_certificates` is separate and opt-in. It makes the
 kubelet bootstrap a CA-signed serving certificate instead of self-signing one,
@@ -339,7 +412,7 @@ MIT.
 | Name | Version |
 |------|---------|
 | terraform | >= 1.9 |
-| aws | ~> 6.65 |
+| aws | 6.65.0 |
 | flux | ~> 1.9 |
 | helm | ~> 3.3 |
 | kubernetes | ~> 3.2 |
@@ -377,6 +450,7 @@ No resources.
 | hubble\_ca\_validity\_hours | Lifetime of the self-signed Hubble trust anchor, in hours. The default of 12 is carried over from before this was configurable and is almost certainly too short for a CA that cert-manager issues from - raise it, or move the trust anchor to cert-manager entirely. | `number` | `12` | no |
 | kubernetes\_api\_allowed\_cidr | CIDR allowed to reach the Kubernetes API on port 6443. Open to the internet by default; narrow it to your own address where you can. | `string` | `"0.0.0.0/0"` | no |
 | kubernetes\_version | Kubernetes version | `string` | `"1.37.0"` | no |
+| machine\_config\_updates | How a machine config change reaches nodes that are already running. The<br/>machine config is launch template user data, which Talos reads once at<br/>first boot, so on its own it only ever reaches a node by replacing it.<br/><br/>`apply_to_running_nodes` applies the rendered config to the existing<br/>control plane and baseline worker nodes over the Talos API, which is what<br/>`talosctl apply-config` does, so a config edit reconfigures the cluster<br/>rather than rebuilding it. User data is still what a newly launched node<br/>reads, so nodes the autoscaling groups or Karpenter bring up later come<br/>up configured without anything to run by hand.<br/><br/>`apply_mode` is how Talos applies it. The default dry-runs the change and<br/>stages it for the next boot if it would need a reboot, applying it<br/>immediately otherwise - which is what keeps a config edit from rebooting<br/>every control plane node at once, since Terraform has no way to serialise<br/>that. `auto` reboots where Talos says a reboot is required.<br/><br/>`instance_refresh` rolls both autoscaling groups whenever their launch<br/>template changes, which is the old behaviour and the only way an AMI<br/>change reaches existing nodes. Off by default: with it on, a one-line<br/>config edit replaces every node in the cluster. | <pre>object({<br/>    apply_to_running_nodes = optional(bool, true)<br/>    apply_mode             = optional(string, "staged_if_needing_reboot")<br/>    instance_refresh       = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | pod\_cidr | Pod subnet CIDR. Set on the Talos machine config and reused as Cilium's strict-mode egress CIDR so the two cannot drift apart. | `string` | `"10.244.0.0/16"` | no |
 | post\_install | What to install once the cluster is up. Flux bootstraps from the git repository described here; the extras are Terraform-managed AWS resources that the Flux bootstrap repository consumes, so they require Flux. Cilium is not listed: it is not optional, because the cluster cannot reach a healthy state without a CNI. | <pre>object({<br/>    flux = object({<br/>      enabled    = bool<br/>      git_url    = string<br/>      git_branch = string<br/>      ssh_key    = string<br/>    })<br/>    extras = object({<br/>      ebs       = bool<br/>      karpenter = bool<br/>    })<br/>  })</pre> | <pre>{<br/>  "extras": {<br/>    "ebs": false,<br/>    "karpenter": false<br/>  },<br/>  "flux": {<br/>    "enabled": false,<br/>    "git_branch": "",<br/>    "git_url": "",<br/>    "ssh_key": ""<br/>  }<br/>}</pre> | no |
 | project\_name | Project name. Used as the prefix for every AWS resource name, as the Talos cluster name, and verbatim as the load balancer and target group name - which is what the constraints below come from. Required: every name this module creates derives from it, and several of them are account-global. | `string` | n/a | yes |
