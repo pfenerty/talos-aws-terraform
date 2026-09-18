@@ -243,7 +243,7 @@ variable "kubernetes_talos_api_access" {
   type = object({
     enabled    = optional(bool, false)
     roles      = optional(list(string), ["os:admin"])
-    namespaces = optional(list(string), ["system-upgrade"])
+    namespaces = optional(list(string), ["tuppr-system"])
   })
   default     = {}
   description = <<-EOT
@@ -260,5 +260,12 @@ variable "kubernetes_talos_api_access" {
     a pod holding it can read the machine config, certificate keys included,
     and replace it. That is a real widening of the cluster's trust boundary,
     and docs/hardening.md sets out what it buys and what it costs.
+
+    A namespace is the only granularity Talos offers here - there is no
+    service account or pod selector - so the namespace named must hold
+    nothing but the controller, and it must match the controller's release
+    namespace exactly or every upgrade fails at the first node. The default
+    is a dedicated `tuppr-system` rather than the conventional
+    `system-upgrade`, which other operators also install into.
   EOT
 }
