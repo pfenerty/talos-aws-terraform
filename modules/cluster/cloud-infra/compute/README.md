@@ -33,15 +33,18 @@ No modules.
 | [aws_iam_role_policy_attachment.worker](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_launch_template.control_plane](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template) | resource |
 | [aws_launch_template.worker](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template) | resource |
-| [aws_ami.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami) | data source |
+| [aws_ami.control_plane](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami) | data source |
+| [aws_ami.worker](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| control\_plane\_architecture | CPU architecture of the control plane AMI. Must match the architecture of control\_plane\_instance\_type. | `string` | `"amd64"` | no |
 | control\_plane\_instance\_type | EC2 instance type for control plane nodes. | `string` | n/a | yes |
 | control\_plane\_machine\_config | Talos control plane machine config, applied as launch template user data. | `string` | n/a | yes |
 | control\_plane\_nodes | Size of the control plane autoscaling group. The group's max\_size is one higher, so an instance refresh can launch a replacement before terminating a node. | `number` | n/a | yes |
+| control\_plane\_root\_volume\_size | Size of the control plane root volume in GiB. | `number` | `50` | no |
 | control\_plane\_security\_group\_id | Security group granting external access to the Kubernetes and Talos APIs. | `string` | n/a | yes |
 | instance\_refresh | Roll both autoscaling groups whenever their launch template changes. Off by default: the machine config is launch template user data, so this would replace every node to deliver a config edit, and the cluster module applies config changes to running nodes over the Talos API instead. Turning it on restores immutable-node behaviour, at the cost of an etcd membership change per control plane node per config change. | `bool` | `false` | no |
 | internal\_security\_group\_id | Security group allowing node-to-node traffic and outbound access. | `string` | n/a | yes |
@@ -51,17 +54,21 @@ No modules.
 | subnets | Subnets the autoscaling groups launch instances into. | `list(string)` | n/a | yes |
 | tags | Tags applied to every resource, and propagated to the instances the autoscaling groups launch. Carries the kubernetes.io/cluster tag the AWS cloud controller manager looks for. | `map(string)` | `{}` | no |
 | talos\_version | Talos Linux version, used to select the matching AMI. | `string` | n/a | yes |
+| worker\_architecture | CPU architecture of the worker AMI. Must match the architecture of worker\_instance\_type, and of whatever Karpenter is allowed to launch. | `string` | `"amd64"` | no |
 | worker\_instance\_type | EC2 instance type for the baseline worker nodes. | `string` | n/a | yes |
 | worker\_machine\_config | Talos worker machine config, applied as launch template user data. | `string` | n/a | yes |
 | worker\_nodes\_max | Ceiling on the worker autoscaling group. Must exceed worker\_nodes\_min to leave an instance refresh room to work. | `number` | n/a | yes |
 | worker\_nodes\_min | Size the worker autoscaling group is created at and stays at; Karpenter provisions capacity above it. | `number` | n/a | yes |
+| worker\_root\_volume\_size | Size of the baseline worker root volume in GiB. This is where container images and ephemeral storage live, so it is the one to raise for an image-heavy workload. | `number` | `50` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
+| control\_plane\_ami\_id | n/a |
 | control\_plane\_autoscaling\_group\_name | n/a |
-| talos\_ami\_id | n/a |
+| worker\_ami\_id | Also what Karpenter launches from: its EC2NodeClass is handed this AMI, so the architecture it is allowed to provision has to match var.worker\_architecture. |
+| worker\_architecture | n/a |
 | worker\_autoscaling\_group\_name | n/a |
 | worker\_iam\_role\_arn | n/a |
 | worker\_instance\_profile\_name | Karpenter launches nodes into the worker role's instance profile rather than creating one of its own, which keeps the instance-profile write permissions out of the controller's policy. |

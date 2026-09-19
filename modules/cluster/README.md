@@ -83,8 +83,11 @@ what still replaces or reboots a node.
 | additional\_tags | Extra tags applied to every resource this module creates, on top of the cluster, ManagedBy and Project tags. | `map(string)` | `{}` | no |
 | availability\_zones | Availability Zones to create subnets in. Null means every zone the region currently reports, which is convenient but means the subnet layout changes if AWS adds a zone; pin it for anything long-lived. The availability\_zones output reports what was used. | `list(string)` | `null` | no |
 | config\_output\_path | Directory to write the generated kubeconfig, talosconfig and machine config files into. Null, the default, writes nothing: the same files are available as outputs, and a module that writes into the caller's directory collides with itself when instantiated more than once. The files carry cluster credentials and are written mode 0600. | `string` | `null` | no |
+| control\_plane\_node\_architecture | CPU architecture for control plane nodes. Must match control\_plane\_node\_instance\_type. | `string` | `"amd64"` | no |
 | control\_plane\_node\_instance\_type | AWS EC2 instance type for control plane nodes | `string` | `"t3.medium"` | no |
 | control\_plane\_nodes | Number of control plane nodes. etcd needs an odd number to hold quorum; 1 is fine for a throwaway cluster but has no redundancy, and an instance refresh will briefly take the API server away. | `number` | `1` | no |
+| control\_plane\_root\_volume\_size | Size of the control plane root volume in GiB. | `number` | `50` | no |
+| enable\_cross\_zone\_load\_balancing | Let each load balancer node forward to control plane targets in any zone. Off avoids inter-AZ transfer charges, and is only safe with a control plane node in every subnet. | `bool` | `true` | no |
 | hardening | Machine config hardening, off by default because it changes what the cluster will admit. Passed through to the Talos config module; see docs/hardening.md for what it covers, what it deliberately leaves alone, and what has to be enforced outside the machine config. kubelet\_serving\_certificates additionally requires a CSR approver deployed by Flux; see the doc before enabling it. | <pre>object({<br/>    enabled                        = optional(bool, false)<br/>    pod_security_enforce           = optional(string, "restricted")<br/>    pod_security_exempt_namespaces = optional(list(string), ["kube-system"])<br/>    kubelet_serving_certificates   = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | kubernetes\_api\_allowed\_cidr | CIDR allowed to reach the Kubernetes API on port 6443. Open to the internet by default; narrow it to your own address where you can. | `string` | `"0.0.0.0/0"` | no |
 | kubernetes\_talos\_api\_access | Lets service accounts in the named Kubernetes namespaces obtain Talos API<br/>credentials carrying the named roles. Off by default.<br/><br/>This is how an in-cluster upgrade controller - tuppr, in the Flux bootstrap<br/>repository - calls the Talos upgrade API on each node, which is what makes<br/>a Talos version bump a change to a manifest rather than a fleet<br/>replacement or a run of `talosctl` by hand.<br/><br/>It is deliberately not part of `hardening`, because it is the opposite of<br/>hardening. `os:admin` is root on the machine as far as Talos is concerned:<br/>a pod holding it can read the machine config, certificate keys included,<br/>and replace it. That is a real widening of the cluster's trust boundary,<br/>and docs/hardening.md sets out what it buys and what it costs.<br/><br/>A namespace is the only granularity Talos offers here - there is no<br/>service account or pod selector - so the namespace named must hold<br/>nothing but the controller, and it must match the controller's release<br/>namespace exactly or every upgrade fails at the first node. The default<br/>is a dedicated `tuppr-system` rather than the conventional<br/>`system-upgrade`, which other operators also install into. | <pre>object({<br/>    enabled    = optional(bool, false)<br/>    roles      = optional(list(string), ["os:admin"])<br/>    namespaces = optional(list(string), ["tuppr-system"])<br/>  })</pre> | `{}` | no |
@@ -96,9 +99,11 @@ what still replaces or reboots a node.
 | talos\_api\_allowed\_cidr | CIDR allowed to reach the Talos API on port 50000. The default is open to the internet, which is what makes `terraform apply` work from anywhere but is the wrong setting for anything you care about: the Talos API administers the machines themselves. Narrow it to your own address. | `string` | `"0.0.0.0/0"` | no |
 | talos\_version | Talos Linux version | `string` | `"v1.14.1"` | no |
 | vpc\_cidr | IPv4 CIDR block for the VPC. Subnets are carved out of it with a /8 offset per Availability Zone, so it needs to be large enough for one /24 per zone. | `string` | `"172.31.0.0/16"` | no |
+| worker\_node\_architecture | CPU architecture for worker nodes. Must match worker\_node\_instance\_type. | `string` | `"amd64"` | no |
 | worker\_node\_instance\_type | AWS EC2 instance type for worker nodes | `string` | `"t3.medium"` | no |
 | worker\_nodes\_max | Ceiling on the worker autoscaling group. Only reached by scaling the group by hand; elastic capacity comes from Karpenter instead. Must leave at least one instance of headroom above worker\_nodes\_min, which is what a rolling instance refresh launches its replacement into. | `number` | `5` | no |
 | worker\_nodes\_min | Size the worker autoscaling group is created at. Nothing scales this group: it is the static baseline that Karpenter itself and the rest of the cluster add-ons run on, and Karpenter provisions everything above it. | `number` | `1` | no |
+| worker\_root\_volume\_size | Size of the baseline worker root volume in GiB. | `number` | `50` | no |
 
 ## Outputs
 
@@ -108,6 +113,7 @@ what still replaces or reboots a node.
 | bootstrap\_inputs | Cluster facts consumed by the bootstrap module. Pass straight to its `cluster` variable. |
 | client\_configuration | Talos client certificates, for the Talos provider's own data sources and resources. |
 | cluster\_endpoint | Kubernetes API endpoint, and the Talos cluster endpoint. |
+| control\_plane\_ami\_id | AMI the control plane nodes boot from. |
 | control\_plane\_autoscaling\_group\_name | Name of the control plane autoscaling group. |
 | control\_plane\_private\_ips | Private addresses of the control plane nodes, ordered by instance ID, which is how Talos identifies them. |
 | control\_plane\_public\_ips | Public addresses of the control plane nodes, ordered by instance ID. The Talos API listens here; node addresses themselves are private. |
@@ -116,8 +122,8 @@ what still replaces or reboots a node.
 | node\_count | Number of nodes the cluster is created with, before Karpenter provisions anything. Used to size add-ons whose replica counts cannot exceed the number of nodes. |
 | oidc\_issuer\_url | URL the API server names as the issuer of its service account tokens, and where the bootstrap module publishes the OIDC discovery documents. Registered with AWS as an IAM identity provider. |
 | subnet\_ids | Subnets the cluster runs in, ordered by Availability Zone. |
-| talos\_ami\_id | AMI the cluster nodes boot from. |
 | talosconfig | Talos client configuration. Contains cluster credentials. |
 | vpc\_id | ID of the VPC the cluster runs in. |
+| worker\_ami\_id | AMI the worker nodes boot from, and the one Karpenter launches with. |
 | worker\_private\_ips | Private addresses of the baseline worker nodes, ordered by instance ID. |
 <!-- END_TF_DOCS -->

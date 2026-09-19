@@ -28,9 +28,14 @@ output "control_plane_autoscaling_group_name" {
   description = "Name of the control plane autoscaling group."
 }
 
-output "talos_ami_id" {
-  value       = module.cluster.talos_ami_id
-  description = "AMI the cluster nodes boot from."
+output "control_plane_ami_id" {
+  value       = module.cluster.control_plane_ami_id
+  description = "AMI the control plane nodes boot from."
+}
+
+output "worker_ami_id" {
+  value       = module.cluster.worker_ami_id
+  description = "AMI the worker nodes boot from, and the one Karpenter launches with."
 }
 
 output "kubeconfig" {

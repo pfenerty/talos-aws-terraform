@@ -81,9 +81,31 @@ module "talos_cluster" {
   kubernetes_api_allowed_cidr = var.allowed_cidr
 
   # Pinning these stops the subnet layout moving if AWS adds an Availability
-  # Zone to the region. Read them off the availability_zones output of a
-  # first apply.
+  # Zone to the region, and it is billed as well as structural: the load
+  # balancer puts a node, and a chargeable public IPv4 address, in every
+  # subnet it spans. Read them off the availability_zones output of a first
+  # apply. See "Cost" in the README.
   availability_zones = var.availability_zones
+
+  # Both architectures default to amd64 so that an existing cluster does not
+  # move underneath an upgrade of this module. Graviton is cheaper at the same
+  # size and a Talos control plane has nothing architecture-specific in it;
+  # the workers are the ones to check first, because every image the cluster
+  # runs needs an arm64 variant and this also pins what Karpenter provisions.
+  #
+  #   control_plane_node_instance_type = "t4g.medium"
+  #   control_plane_node_architecture  = "arm64"
+  #   worker_node_instance_type        = "t4g.medium"
+  #   worker_node_architecture         = "arm64"
+
+  # Karpenter provisions elastic capacity from both spot and on-demand by
+  # default, which is where most of the instance-hours in a busy cluster end
+  # up. Safe here because the module creates the interruption queue Karpenter
+  # drains reclaimed nodes from; narrow it for workloads that cannot absorb a
+  # two-minute interruption notice.
+  karpenter = {
+    capacity_types = ["spot", "on-demand"]
+  }
 
   # Off by default: `restricted` Pod Security Admission will refuse workloads
   # that a default cluster admits. docs/hardening.md covers what this does,

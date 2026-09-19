@@ -19,7 +19,10 @@ module "networking" {
   talos_api_allowed_cidr      = var.talos_api_allowed_cidr
   availability_zones          = var.availability_zones
   vpc_cidr                    = var.vpc_cidr
-  tags                        = local.tags
+
+  enable_cross_zone_load_balancing = var.enable_cross_zone_load_balancing
+
+  tags = local.tags
 }
 
 data "aws_caller_identity" "current" {}
@@ -64,9 +67,13 @@ module "compute" {
   internal_security_group_id      = module.networking.internal_security_group_id
   control_plane_nodes             = var.control_plane_nodes
   control_plane_instance_type     = var.control_plane_node_instance_type
+  control_plane_architecture      = var.control_plane_node_architecture
+  control_plane_root_volume_size  = var.control_plane_root_volume_size
   worker_nodes_min                = var.worker_nodes_min
   worker_nodes_max                = var.worker_nodes_max
   worker_instance_type            = var.worker_node_instance_type
+  worker_architecture             = var.worker_node_architecture
+  worker_root_volume_size         = var.worker_root_volume_size
   control_plane_machine_config    = module.talos_config.control_plane_machine_config
   worker_machine_config           = module.talos_config.worker_machine_config
   load_balancer_target_group_arn  = module.networking.load_balancer_target_group_arn

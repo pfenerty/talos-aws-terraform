@@ -18,9 +18,15 @@ module "cluster" {
 
   control_plane_nodes              = var.control_plane_nodes
   control_plane_node_instance_type = var.control_plane_node_instance_type
+  control_plane_node_architecture  = var.control_plane_node_architecture
+  control_plane_root_volume_size   = var.control_plane_root_volume_size
   worker_nodes_min                 = var.worker_nodes_min
   worker_nodes_max                 = var.worker_nodes_max
   worker_node_instance_type        = var.worker_node_instance_type
+  worker_node_architecture         = var.worker_node_architecture
+  worker_root_volume_size          = var.worker_root_volume_size
+
+  enable_cross_zone_load_balancing = var.enable_cross_zone_load_balancing
 
   talos_version      = var.talos_version
   kubernetes_version = var.kubernetes_version
@@ -40,6 +46,8 @@ module "bootstrap" {
 
   flux   = var.post_install.flux
   extras = var.post_install.extras
+
+  karpenter = var.karpenter
 
   cilium_bootstrap_version = var.cilium_bootstrap_version
   hubble_ca_validity_hours = var.hubble_ca_validity_hours

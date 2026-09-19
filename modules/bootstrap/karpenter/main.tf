@@ -152,6 +152,17 @@ resource "kubernetes_secret_v1" "this" {
     node-instance-profile = var.node_instance_profile_name
     node-ami-id           = var.node_ami_id
     node-user-data        = var.node_user_data
+
+    # The NodePool's requirements, rather than the EC2NodeClass's. Both are
+    # Terraform's to decide: the architecture has to agree with the AMI pinned
+    # above, and the capacity types are what decide whether elastic capacity is
+    # billed at spot or on-demand rates.
+    #
+    # Comma-separated because a Secret's values are strings; the NodePool
+    # splits it. Karpenter's own NodePool schema takes a list, so the Flux
+    # repository does the split rather than passing this through verbatim.
+    node-architecture = var.node_architecture
+    capacity-types    = join(",", var.capacity_types)
   }
 }
 

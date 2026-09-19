@@ -21,6 +21,7 @@ variable "cluster" {
     worker_instance_profile_name    = string
     worker_iam_role_arn             = string
     worker_ami_id                   = string
+    worker_architecture             = string
     karpenter_worker_machine_config = string
 
     # IRSA. The bucket is created here but named by the cluster module,
@@ -87,6 +88,41 @@ variable "extras" {
   default = {
     ebs       = false
     karpenter = false
+  }
+}
+
+variable "karpenter" {
+  type = object({
+    capacity_types = optional(list(string), ["spot", "on-demand"])
+  })
+  default     = {}
+  description = <<-EOT
+    Karpenter provisioning policy, published into the karpenter-config secret
+    for the NodePool in the Flux bootstrap repository to read.
+
+    `capacity_types` is the list of EC2 purchase options the NodePool may
+    provision, in no particular order - Karpenter's own price-capacity-optimized
+    strategy decides between them, and listing spot first does not prefer it.
+    The default allows both, which is what makes elastic capacity cost a
+    fraction of the baseline; drop to ["on-demand"] for workloads that cannot
+    absorb a two-minute interruption notice.
+
+    Spot is safe to allow here by construction: this module creates the
+    interruption queue and the EventBridge rules that feed it, so Karpenter
+    sees the reclamation notice and drains the node rather than losing it.
+
+    This only sets what Terraform publishes. The NodePool has to read it -
+    see "Node autoscaling" in the README for the valuesFrom entry.
+  EOT
+
+  validation {
+    condition     = length(var.karpenter.capacity_types) > 0
+    error_message = "karpenter.capacity_types must name at least one of spot or on-demand."
+  }
+
+  validation {
+    condition     = length(setsubtract(var.karpenter.capacity_types, ["spot", "on-demand"])) == 0
+    error_message = "karpenter.capacity_types may only contain \"spot\" and \"on-demand\"."
   }
 }
 

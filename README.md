@@ -293,15 +293,46 @@ The Karpenter `HelmRelease`, `EC2NodeClass` and `NodePool` live in the Flux
 bootstrap repository and read those. `karpenter-config` carries
 `cluster-name`, `cluster-endpoint` (Karpenter only discovers this by itself on
 EKS), `region`, `interruption-queue`, `discovery-tag`,
-`node-instance-profile`, `node-ami-id` and `node-user-data`, and the
-`HelmRelease` reads it through `valuesFrom`, which resolves secrets in the
-`HelmRelease`'s own namespace.
+`node-instance-profile`, `node-ami-id`, `node-user-data`, `node-architecture`
+and `capacity-types`, and the `HelmRelease` reads it through `valuesFrom`,
+which resolves secrets in the `HelmRelease`'s own namespace.
 
 The second object exists because the controller's AWS identity is not a chart
 value: it is read from the environment, and the chart's only hook for that is
 `controller.envFrom`, which resolves in the *pod's* namespace. It carries
 `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_REGION`, and no
 credential - see [Cluster identity](#cluster-identity).
+
+### What the NodePool reads
+
+`node-architecture` and `capacity-types` are `NodePool` requirements rather
+than `EC2NodeClass` fields, but both are Terraform's to decide. The
+architecture has to agree with the AMI pinned in `node-ami-id` - Karpenter
+would otherwise happily launch an `arm64` instance from an `amd64` image, and
+the node would never register. `capacity-types` comes from `var.karpenter`,
+and defaults to allowing both `spot` and `on-demand`.
+
+Spot is safe to allow here by construction: the interruption queue and the
+EventBridge rules above are exactly what lets Karpenter see a reclamation
+notice and drain the node inside its two-minute window. It is the single
+largest lever on what elastic capacity costs - see [Cost](#cost).
+
+`capacity-types` is comma-separated, because a `Secret`'s values are strings
+and the `NodePool` schema wants a list. The Flux repository does the split:
+
+```yaml
+# clusters/<project_name>/karpenter/nodepool.yaml
+requirements:
+  - key: kubernetes.io/arch
+    operator: In
+    values: ["${node_architecture}"]
+  - key: karpenter.sh/capacity-type
+    operator: In
+    values: [${capacity_types}]
+```
+
+Terraform publishes the values; the `NodePool` has to be wired to read them.
+Until it is, `var.karpenter` changes nothing about what Karpenter provisions.
 
 `node-user-data` is a Talos worker machine config, so the `EC2NodeClass` needs
 `amiFamily: Custom`. Two things follow from that. Karpenter does not get to
@@ -441,6 +472,88 @@ talos_api_allowed_cidr      = "203.0.113.4/32"
 kubernetes_api_allowed_cidr = "203.0.113.4/32"
 ```
 
+## Cost
+
+Nothing here is a managed service, so the bill is the sum of the parts. There
+is no EKS control plane fee and no NAT gateway - nodes carry public addresses
+and reach the internet through the internet gateway directly, which is the
+single biggest line item this layout avoids.
+
+What remains, in rough order of how much of it there usually is:
+
+| Line item | Billed per | Set by |
+| --- | --- | --- |
+| EC2 instances | instance-hour | `*_node_instance_type`, `control_plane_nodes`, `worker_nodes_min`, and whatever Karpenter provisions |
+| gp3 root volumes | GiB-month | `control_plane_root_volume_size`, `worker_root_volume_size` |
+| Public IPv4 addresses | address-hour | one per node, plus one per Availability Zone the load balancer spans |
+| Network load balancer | hour, plus NLCU-hour | fixed |
+| Internet egress | GiB | workload |
+| Inter-AZ transfer | GiB, both directions | `enable_cross_zone_load_balancing`, and pod placement |
+| S3, SQS, EventBridge | request | negligible; these exist for IRSA and Karpenter interruption |
+
+Four knobs move it meaningfully.
+
+**Pin `availability_zones`.** Left unset it creates a subnet in every zone the
+region currently reports, and the load balancer puts a node - and a chargeable
+public IPv4 address - in each one. In a six-zone region that is four addresses
+more than a three-zone cluster needs, for no redundancy a three-zone cluster
+does not already have. Pinning it is also what stops the subnet layout moving
+if AWS adds a zone, so there is no reason not to:
+
+```hcl
+availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+```
+
+Read the `availability_zones` output of a first apply to see what you got.
+
+**Allow spot for Karpenter.** `var.karpenter.capacity_types` defaults to
+`["spot", "on-demand"]`, and elastic capacity is where the instance-hours
+actually accumulate. This is safe here in a way it is not on a cluster without
+an interruption queue: Terraform creates the queue and the EventBridge rules,
+so Karpenter drains a reclaimed node rather than losing it. The `NodePool` has
+to be wired to read the value - see
+[What the NodePool reads](#what-the-nodepool-reads).
+
+**Size the root volumes.** Both default to 50 GiB. Talos itself is tiny; the
+disk is sized for what lands in `EPHEMERAL` - etcd's data directory on a
+control plane node, container images and ephemeral storage on a worker. Raise
+`worker_root_volume_size` for an image-heavy workload rather than raising both.
+gp3 is left at its included 3000 IOPS and 125 MB/s baseline, which is free at
+any volume size; provisioning above it is billed separately and nothing here
+needs it.
+
+Note that this does not size the nodes Karpenter launches - those take their
+block device mapping from the `EC2NodeClass` in the Flux bootstrap repository,
+which is where to set it for the population that actually grows.
+
+**Consider Graviton.** `control_plane_node_architecture` and
+`worker_node_architecture` select the Talos AMI, and both default to `amd64` so
+that an existing cluster does not move underneath you. Graviton instance
+families are materially cheaper than their x86 equivalents at the same size,
+and a Talos control plane has nothing architecture-specific in it. Workers are
+the ones to check first: every image the cluster runs needs an `arm64` variant,
+and `worker_node_architecture` also pins what Karpenter is allowed to provision.
+
+```hcl
+control_plane_node_instance_type = "t4g.medium"
+control_plane_node_architecture  = "arm64"
+worker_node_instance_type        = "t4g.medium"
+worker_node_architecture         = "arm64"
+```
+
+Changing either on a running cluster is a node replacement, not an in-place
+change. The architecture is in the launch template, and
+`machine_config_updates.instance_refresh` is off by default, so nothing rolls
+on its own: new nodes come up on the new architecture and existing ones stay
+where they are until they are replaced deliberately. On the control plane that
+is an etcd membership change per node, so do it one at a time and with a
+working etcd backup - see [Machine config updates](#machine-config-updates).
+
+Two things this module does not do, because neither belongs in Terraform:
+Savings Plans and Reserved Instances are account-level commitments, and the
+baseline groups here are a reasonable thing to cover with one. Right-sizing
+`t3.medium` is a workload question - it is a default, not a recommendation.
+
 ## Credentials
 
 `kubeconfig` and `talosconfig` are outputs, both marked sensitive:
@@ -542,14 +655,18 @@ No resources.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | additional\_tags | Extra tags applied to every resource this module creates, on top of the cluster, ManagedBy and Project tags. | `map(string)` | `{}` | no |
-| availability\_zones | Availability Zones to create subnets in. Null means every zone the region currently reports, which is convenient but means the subnet layout changes if AWS adds a zone; pin it for anything long-lived. The availability\_zones output reports what was used. | `list(string)` | `null` | no |
+| availability\_zones | Availability Zones to create subnets in. Null means every zone the region currently reports, which is convenient but means the subnet layout changes if AWS adds a zone; pin it for anything long-lived. The availability\_zones output reports what was used. Pinning it is also the single cheapest change here: the load balancer places a node, and a chargeable public IPv4 address, in every subnet it spans, so an unpinned six-zone region bills four addresses a three-zone cluster would not. See "Cost" in the README. | `list(string)` | `null` | no |
 | cilium\_bootstrap\_version | Cilium chart version installed to get the cluster to Ready. Changing it affects new clusters only: on an existing cluster Cilium belongs to Flux, and the bootstrap module deliberately stops reconciling the release after creating it. | `string` | `"1.20.2"` | no |
 | cluster\_health\_timeout | How long to wait for the cluster to report healthy before giving up. This is a ceiling, not a delay: the check returns as soon as the cluster is ready. Terraform re-reads the health check on refresh, so this also bounds how long a plan blocks when the cluster is unreachable. | `string` | `"10m"` | no |
 | config\_output\_path | Directory to write the generated kubeconfig, talosconfig and machine config files into. Null, the default, writes nothing: the same files are available as outputs, and a module that writes into the caller's directory collides with itself when instantiated more than once. The files carry cluster credentials and are written mode 0600. | `string` | `null` | no |
-| control\_plane\_node\_instance\_type | AWS EC2 instance type for control plane nodes | `string` | `"t3.medium"` | no |
+| control\_plane\_node\_architecture | CPU architecture for control plane nodes, selecting the Talos AMI. Must match control\_plane\_node\_instance\_type: a mismatch fails to boot with nothing useful in the console. Changing it on a running cluster replaces every control plane node, one etcd member at a time - see "Cost" in the README before flipping it. | `string` | `"amd64"` | no |
+| control\_plane\_node\_instance\_type | AWS EC2 instance type for control plane nodes. Graviton families (t4g, m7g, c7g) are materially cheaper than their x86 equivalents; pair them with control\_plane\_node\_architecture = "arm64". | `string` | `"t3.medium"` | no |
 | control\_plane\_nodes | Number of control plane nodes. etcd needs an odd number to hold quorum; 1 is fine for a throwaway cluster but has no redundancy, and an instance refresh will briefly take the API server away. | `number` | `1` | no |
+| control\_plane\_root\_volume\_size | Size of the control plane root volume in GiB. Talos itself needs very little; this is sized for etcd's data directory and the control plane images. | `number` | `50` | no |
+| enable\_cross\_zone\_load\_balancing | Let each load balancer node forward to control plane targets in any Availability Zone. On by default, because with fewer control plane nodes than subnets some zones hold no target at all and the API would be unreachable through them. Turning it off avoids inter-AZ transfer charges on API traffic, and is only safe with a control plane node in every subnet the balancer spans. | `bool` | `true` | no |
 | hardening | Machine config hardening, off by default because it changes what the cluster will admit. `enabled` turns on a real API server audit policy and Pod Security Admission enforcing the standard named below. It is the machine config half of a hardening baseline and not the whole of one: docs/hardening.md sets out what it covers, what Talos already does without it, and what has to be enforced in the Flux repository or the AWS layer instead. `kubelet_serving_certificates` makes the kubelet bootstrap a CA-signed serving certificate rather than self-signing one, and requires a CSR approver running in the cluster - a Flux dependency this module cannot install, and without which `kubectl logs` and `exec` stop working. | <pre>object({<br/>    enabled                        = optional(bool, false)<br/>    pod_security_enforce           = optional(string, "restricted")<br/>    pod_security_exempt_namespaces = optional(list(string), ["kube-system"])<br/>    kubelet_serving_certificates   = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | hubble\_ca\_validity\_hours | Lifetime of the self-signed Hubble trust anchor, in hours. The default of 12 is carried over from before this was configurable and is almost certainly too short for a CA that cert-manager issues from - raise it, or move the trust anchor to cert-manager entirely. | `number` | `12` | no |
+| karpenter | Karpenter provisioning policy, published into the karpenter-config secret for the NodePool in the Flux bootstrap repository to read. `capacity_types` is the set of EC2 purchase options the NodePool may provision; allowing spot is the single largest lever on the cost of elastic capacity, and is safe here because this module creates the interruption queue Karpenter drains reclaimed nodes from. Drop to ["on-demand"] for workloads that cannot absorb a two-minute interruption notice. | <pre>object({<br/>    capacity_types = optional(list(string), ["spot", "on-demand"])<br/>  })</pre> | `{}` | no |
 | kubernetes\_api\_allowed\_cidr | CIDR allowed to reach the Kubernetes API on port 6443. Open to the internet by default; narrow it to your own address where you can. | `string` | `"0.0.0.0/0"` | no |
 | kubernetes\_talos\_api\_access | Lets service accounts in the named Kubernetes namespaces obtain Talos API<br/>credentials carrying the named roles. Off by default.<br/><br/>This is how an in-cluster upgrade controller - tuppr, in the Flux bootstrap<br/>repository - calls the Talos upgrade API on each node, which is what makes<br/>a Talos version bump a change to a manifest rather than a fleet<br/>replacement or a run of `talosctl` by hand.<br/><br/>It is deliberately not part of `hardening`, because it is the opposite of<br/>hardening. `os:admin` is root on the machine as far as Talos is concerned:<br/>a pod holding it can read the machine config, certificate keys included,<br/>and replace it. That is a real widening of the cluster's trust boundary,<br/>and docs/hardening.md sets out what it buys and what it costs.<br/><br/>A namespace is the only granularity Talos offers here - there is no<br/>service account or pod selector - so the namespace named must hold<br/>nothing but the controller, and it must match the controller's release<br/>namespace exactly or every upgrade fails at the first node. The default<br/>is a dedicated `tuppr-system` rather than the conventional<br/>`system-upgrade`, which other operators also install into. | <pre>object({<br/>    enabled    = optional(bool, false)<br/>    roles      = optional(list(string), ["os:admin"])<br/>    namespaces = optional(list(string), ["tuppr-system"])<br/>  })</pre> | `{}` | no |
 | kubernetes\_version | Kubernetes version | `string` | `"1.37.0"` | no |
@@ -561,9 +678,11 @@ No resources.
 | talos\_api\_allowed\_cidr | CIDR allowed to reach the Talos API on port 50000. The default is open to the internet, which is what makes `terraform apply` work from anywhere but is the wrong setting for anything you care about: the Talos API administers the machines themselves. Narrow it to your own address. | `string` | `"0.0.0.0/0"` | no |
 | talos\_version | Talos Linux version | `string` | `"v1.14.1"` | no |
 | vpc\_cidr | IPv4 CIDR block for the VPC. Subnets are carved out of it with a /8 offset per Availability Zone, so it needs to be large enough for one /24 per zone. | `string` | `"172.31.0.0/16"` | no |
-| worker\_node\_instance\_type | AWS EC2 instance type for worker nodes | `string` | `"t3.medium"` | no |
+| worker\_node\_architecture | CPU architecture for worker nodes, selecting the Talos AMI. Must match worker\_node\_instance\_type. Also published to Karpenter, which pins its NodePool's kubernetes.io/arch to it, so this decides the architecture of every node the cluster ever provisions - not just the baseline group. | `string` | `"amd64"` | no |
+| worker\_node\_instance\_type | AWS EC2 instance type for the baseline worker nodes. Graviton families (t4g, m7g, c7g) are materially cheaper than their x86 equivalents; pair them with worker\_node\_architecture = "arm64", and check that every image the cluster runs has an arm64 variant first. | `string` | `"t3.medium"` | no |
 | worker\_nodes\_max | Ceiling on the worker autoscaling group. Only reached by scaling the group by hand; elastic capacity comes from Karpenter instead. Must leave at least one instance of headroom above worker\_nodes\_min, which is what a rolling instance refresh launches its replacement into. | `number` | `5` | no |
 | worker\_nodes\_min | Size the worker autoscaling group is created at. Nothing scales this group: it is the static baseline that Karpenter itself and the rest of the cluster add-ons run on, and Karpenter provisions everything above it. | `number` | `1` | no |
+| worker\_root\_volume\_size | Size of the baseline worker root volume in GiB. This is where container images and ephemeral storage live, so it is the one to raise for an image-heavy workload. It does not size the nodes Karpenter launches: those take their block device mapping from the EC2NodeClass in the Flux bootstrap repository. | `number` | `50` | no |
 
 ## Outputs
 
@@ -571,12 +690,13 @@ No resources.
 |------|-------------|
 | availability\_zones | Availability Zones the subnets were created in. Pin var.availability\_zones to this list to stop the layout moving. |
 | cluster\_endpoint | Kubernetes API endpoint, and the Talos cluster endpoint. |
+| control\_plane\_ami\_id | AMI the control plane nodes boot from. |
 | control\_plane\_autoscaling\_group\_name | Name of the control plane autoscaling group. |
 | flux\_path | Path inside the Flux bootstrap repository this cluster syncs from. |
 | kubeconfig | Admin kubeconfig for the cluster. Contains cluster credentials: `terraform output -raw kubeconfig > ~/.kube/talos` rather than letting it into a log. |
 | load\_balancer\_dns | DNS name of the network load balancer in front of the control plane. |
 | subnet\_ids | Subnets the cluster runs in, ordered by Availability Zone. |
-| talos\_ami\_id | AMI the cluster nodes boot from. |
 | talosconfig | Talos client configuration. Contains cluster credentials. |
 | vpc\_id | ID of the VPC the cluster runs in. |
+| worker\_ami\_id | AMI the worker nodes boot from, and the one Karpenter launches with. |
 <!-- END_TF_DOCS -->

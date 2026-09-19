@@ -135,7 +135,9 @@ module "karpenter" {
   node_instance_profile_name = var.cluster.worker_instance_profile_name
   node_iam_role_arn          = var.cluster.worker_iam_role_arn
   node_ami_id                = var.cluster.worker_ami_id
+  node_architecture          = var.cluster.worker_architecture
   node_user_data             = var.cluster.karpenter_worker_machine_config
+  capacity_types             = var.karpenter.capacity_types
   token_path                 = local.irsa_token_path
   oidc                       = module.oidc
   tags                       = var.cluster.tags
