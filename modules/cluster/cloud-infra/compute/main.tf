@@ -1,6 +1,22 @@
-data "aws_ami" "this" {
+# One AMI per role rather than one for the cluster, because the two roles can
+# run on different architectures: a Graviton control plane in front of x86
+# workers is a reasonable thing to want while a workload is still being ported,
+# and the reverse is what an incremental migration looks like on the way there.
+#
+# Sidero publishes one image per architecture per region, and the architecture
+# has to agree with the instance type or the instance fails to boot with
+# nothing useful in the console. Nothing here can check that pairing - the
+# instance type is a free string and AWS is the only thing that knows what it
+# runs on - so the architecture variables are constrained to the two values
+# Sidero actually publishes and the pairing is left to the caller.
+data "aws_ami" "control_plane" {
   owners     = ["540036508848"]
-  name_regex = "^talos-${var.talos_version}-${var.region}-amd64$"
+  name_regex = "^talos-${var.talos_version}-${var.region}-${var.control_plane_architecture}$"
+}
+
+data "aws_ami" "worker" {
+  owners     = ["540036508848"]
+  name_regex = "^talos-${var.talos_version}-${var.region}-${var.worker_architecture}$"
 }
 
 # The control plane role grants nothing, deliberately. Its only consumer was
@@ -42,7 +58,7 @@ resource "aws_iam_instance_profile" "control_plane" {
 
 resource "aws_launch_template" "control_plane" {
   name_prefix   = "${var.project_name}-control-plane"
-  image_id      = data.aws_ami.this.id
+  image_id      = data.aws_ami.control_plane.id
   instance_type = var.control_plane_instance_type
 
   # Launch templates require user data to be base64 encoded; launch
@@ -83,11 +99,15 @@ resource "aws_launch_template" "control_plane" {
     http_put_response_hop_limit = 1
   }
 
+  # gp3 is left at its included baseline of 3000 IOPS and 125 MB/s: both are
+  # free at any volume size, and provisioning above them is billed separately.
+  # Nothing here needs more, and an etcd that does wants a bigger instance
+  # rather than a faster root disk.
   block_device_mappings {
-    device_name = data.aws_ami.this.root_device_name
+    device_name = data.aws_ami.control_plane.root_device_name
 
     ebs {
-      volume_size           = 100
+      volume_size           = var.control_plane_root_volume_size
       volume_type           = "gp3"
       encrypted             = true
       delete_on_termination = true
@@ -206,7 +226,7 @@ resource "aws_iam_instance_profile" "worker" {
 
 resource "aws_launch_template" "worker" {
   name_prefix   = "${var.project_name}-worker"
-  image_id      = data.aws_ami.this.id
+  image_id      = data.aws_ami.worker.id
   instance_type = var.worker_instance_type
 
   # Launch templates require user data to be base64 encoded; launch
@@ -247,11 +267,14 @@ resource "aws_launch_template" "worker" {
     http_put_response_hop_limit = 1
   }
 
+  # Sized independently of the control plane: this is the disk container
+  # images and ephemeral storage land on, so it is the one that grows with
+  # what the cluster actually runs. See the note on gp3 baselines above.
   block_device_mappings {
-    device_name = data.aws_ami.this.root_device_name
+    device_name = data.aws_ami.worker.root_device_name
 
     ebs {
-      volume_size           = 100
+      volume_size           = var.worker_root_volume_size
       volume_type           = "gp3"
       encrypted             = true
       delete_on_termination = true

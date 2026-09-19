@@ -140,13 +140,27 @@ resource "aws_vpc_security_group_ingress_rule" "talos_api" {
   cidr_ipv4         = var.talos_api_allowed_cidr
 }
 
+# One load balancer node per subnet, and AWS bills a public IPv4 address for
+# each of them. That is the hidden cost of leaving var.availability_zones
+# unset: in a six-zone region this is six addresses rather than the two or
+# three a control plane actually needs. See "Cost" in the README.
 resource "aws_lb" "this" {
   name               = var.project_name
   internal           = false
   load_balancer_type = "network"
 
-  enable_cross_zone_load_balancing = true
-  subnets                          = local.subnet_ids
+  # Billed: traffic a load balancer node forwards to a target in another zone
+  # is inter-AZ transfer, charged in both directions. Left on because it is
+  # what keeps the API reachable when the zone a client resolved to holds no
+  # healthy control plane node - which is the normal state of affairs with
+  # control_plane_nodes = 1 and subnets in every zone. Turning it off is only
+  # safe with a control plane node in every subnet this balancer spans.
+  #
+  # For port 6443 the volume is small either way: this carries API traffic,
+  # not workload traffic.
+  enable_cross_zone_load_balancing = var.enable_cross_zone_load_balancing
+
+  subnets = local.subnet_ids
 
   tags = var.tags
 }

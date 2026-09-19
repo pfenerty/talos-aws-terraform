@@ -33,6 +33,16 @@ variable "node_ami_id" {
   description = "Talos AMI the EC2NodeClass selects. Pinned rather than discovered so Karpenter nodes cannot drift off the Talos version the rest of the cluster runs."
 }
 
+variable "node_architecture" {
+  type        = string
+  description = "CPU architecture of node_ami_id. Published so the NodePool constrains kubernetes.io/arch to what the pinned AMI can actually boot."
+}
+
+variable "capacity_types" {
+  type        = list(string)
+  description = "EC2 purchase options the NodePool may provision. Allowing spot alongside on-demand is what makes elastic capacity cheap, and is safe here because this module creates the interruption queue that lets Karpenter drain a reclaimed node."
+}
+
 variable "node_user_data" {
   type        = string
   description = "Talos worker machine config used as the EC2NodeClass user data."

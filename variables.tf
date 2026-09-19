@@ -29,7 +29,7 @@ variable "additional_tags" {
 }
 
 variable "availability_zones" {
-  description = "Availability Zones to create subnets in. Null means every zone the region currently reports, which is convenient but means the subnet layout changes if AWS adds a zone; pin it for anything long-lived. The availability_zones output reports what was used."
+  description = "Availability Zones to create subnets in. Null means every zone the region currently reports, which is convenient but means the subnet layout changes if AWS adds a zone; pin it for anything long-lived. The availability_zones output reports what was used. Pinning it is also the single cheapest change here: the load balancer places a node, and a chargeable public IPv4 address, in every subnet it spans, so an unpinned six-zone region bills four addresses a three-zone cluster would not. See \"Cost\" in the README."
   type        = list(string)
   default     = null
 }
@@ -76,7 +76,24 @@ variable "control_plane_nodes" {
 variable "control_plane_node_instance_type" {
   type        = string
   default     = "t3.medium"
-  description = "AWS EC2 instance type for control plane nodes"
+  description = "AWS EC2 instance type for control plane nodes. Graviton families (t4g, m7g, c7g) are materially cheaper than their x86 equivalents; pair them with control_plane_node_architecture = \"arm64\"."
+}
+
+variable "control_plane_node_architecture" {
+  type        = string
+  default     = "amd64"
+  description = "CPU architecture for control plane nodes, selecting the Talos AMI. Must match control_plane_node_instance_type: a mismatch fails to boot with nothing useful in the console. Changing it on a running cluster replaces every control plane node, one etcd member at a time - see \"Cost\" in the README before flipping it."
+
+  validation {
+    condition     = contains(["amd64", "arm64"], var.control_plane_node_architecture)
+    error_message = "control_plane_node_architecture must be amd64 or arm64: those are the architectures Sidero publishes Talos AMIs for."
+  }
+}
+
+variable "control_plane_root_volume_size" {
+  type        = number
+  default     = 50
+  description = "Size of the control plane root volume in GiB. Talos itself needs very little; this is sized for etcd's data directory and the control plane images."
 }
 
 variable "worker_nodes_min" {
@@ -104,7 +121,38 @@ variable "worker_nodes_max" {
 variable "worker_node_instance_type" {
   type        = string
   default     = "t3.medium"
-  description = "AWS EC2 instance type for worker nodes"
+  description = "AWS EC2 instance type for the baseline worker nodes. Graviton families (t4g, m7g, c7g) are materially cheaper than their x86 equivalents; pair them with worker_node_architecture = \"arm64\", and check that every image the cluster runs has an arm64 variant first."
+}
+
+variable "worker_node_architecture" {
+  type        = string
+  default     = "amd64"
+  description = "CPU architecture for worker nodes, selecting the Talos AMI. Must match worker_node_instance_type. Also published to Karpenter, which pins its NodePool's kubernetes.io/arch to it, so this decides the architecture of every node the cluster ever provisions - not just the baseline group."
+
+  validation {
+    condition     = contains(["amd64", "arm64"], var.worker_node_architecture)
+    error_message = "worker_node_architecture must be amd64 or arm64: those are the architectures Sidero publishes Talos AMIs for."
+  }
+}
+
+variable "worker_root_volume_size" {
+  type        = number
+  default     = 50
+  description = "Size of the baseline worker root volume in GiB. This is where container images and ephemeral storage live, so it is the one to raise for an image-heavy workload. It does not size the nodes Karpenter launches: those take their block device mapping from the EC2NodeClass in the Flux bootstrap repository."
+}
+
+variable "enable_cross_zone_load_balancing" {
+  type        = bool
+  default     = true
+  description = "Let each load balancer node forward to control plane targets in any Availability Zone. On by default, because with fewer control plane nodes than subnets some zones hold no target at all and the API would be unreachable through them. Turning it off avoids inter-AZ transfer charges on API traffic, and is only safe with a control plane node in every subnet the balancer spans."
+}
+
+variable "karpenter" {
+  type = object({
+    capacity_types = optional(list(string), ["spot", "on-demand"])
+  })
+  default     = {}
+  description = "Karpenter provisioning policy, published into the karpenter-config secret for the NodePool in the Flux bootstrap repository to read. `capacity_types` is the set of EC2 purchase options the NodePool may provision; allowing spot is the single largest lever on the cost of elastic capacity, and is safe here because this module creates the interruption queue Karpenter drains reclaimed nodes from. Drop to [\"on-demand\"] for workloads that cannot absorb a two-minute interruption notice."
 }
 
 # renovate: datasource=github-releases depName=siderolabs/talos

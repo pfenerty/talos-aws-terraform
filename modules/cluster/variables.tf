@@ -211,3 +211,43 @@ variable "kubernetes_talos_api_access" {
     `system-upgrade`, which other operators also install into.
   EOT
 }
+
+variable "control_plane_node_architecture" {
+  type        = string
+  default     = "amd64"
+  description = "CPU architecture for control plane nodes. Must match control_plane_node_instance_type."
+
+  validation {
+    condition     = contains(["amd64", "arm64"], var.control_plane_node_architecture)
+    error_message = "control_plane_node_architecture must be amd64 or arm64."
+  }
+}
+
+variable "worker_node_architecture" {
+  type        = string
+  default     = "amd64"
+  description = "CPU architecture for worker nodes. Must match worker_node_instance_type."
+
+  validation {
+    condition     = contains(["amd64", "arm64"], var.worker_node_architecture)
+    error_message = "worker_node_architecture must be amd64 or arm64."
+  }
+}
+
+variable "control_plane_root_volume_size" {
+  type        = number
+  default     = 50
+  description = "Size of the control plane root volume in GiB."
+}
+
+variable "worker_root_volume_size" {
+  type        = number
+  default     = 50
+  description = "Size of the baseline worker root volume in GiB."
+}
+
+variable "enable_cross_zone_load_balancing" {
+  type        = bool
+  default     = true
+  description = "Let each load balancer node forward to control plane targets in any zone. Off avoids inter-AZ transfer charges, and is only safe with a control plane node in every subnet."
+}

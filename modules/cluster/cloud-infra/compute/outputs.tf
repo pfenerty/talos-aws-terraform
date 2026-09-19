@@ -17,6 +17,16 @@ output "worker_iam_role_arn" {
   value = aws_iam_role.worker_assume_role.arn
 }
 
-output "talos_ami_id" {
-  value = data.aws_ami.this.id
+output "control_plane_ami_id" {
+  value = data.aws_ami.control_plane.id
+}
+
+# Also what Karpenter launches from: its EC2NodeClass is handed this AMI, so
+# the architecture it is allowed to provision has to match var.worker_architecture.
+output "worker_ami_id" {
+  value = data.aws_ami.worker.id
+}
+
+output "worker_architecture" {
+  value = var.worker_architecture
 }

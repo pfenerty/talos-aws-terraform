@@ -81,3 +81,47 @@ variable "instance_refresh" {
   default     = false
   description = "Roll both autoscaling groups whenever their launch template changes. Off by default: the machine config is launch template user data, so this would replace every node to deliver a config edit, and the cluster module applies config changes to running nodes over the Talos API instead. Turning it on restores immutable-node behaviour, at the cost of an etcd membership change per control plane node per config change."
 }
+
+variable "control_plane_architecture" {
+  type        = string
+  default     = "amd64"
+  description = "CPU architecture of the control plane AMI. Must match the architecture of control_plane_instance_type."
+
+  validation {
+    condition     = contains(["amd64", "arm64"], var.control_plane_architecture)
+    error_message = "control_plane_architecture must be amd64 or arm64: those are the architectures Sidero publishes Talos AMIs for."
+  }
+}
+
+variable "worker_architecture" {
+  type        = string
+  default     = "amd64"
+  description = "CPU architecture of the worker AMI. Must match the architecture of worker_instance_type, and of whatever Karpenter is allowed to launch."
+
+  validation {
+    condition     = contains(["amd64", "arm64"], var.worker_architecture)
+    error_message = "worker_architecture must be amd64 or arm64: those are the architectures Sidero publishes Talos AMIs for."
+  }
+}
+
+variable "control_plane_root_volume_size" {
+  type        = number
+  default     = 50
+  description = "Size of the control plane root volume in GiB."
+
+  validation {
+    condition     = var.control_plane_root_volume_size >= 20
+    error_message = "control_plane_root_volume_size must be at least 20 GiB: below that the EPHEMERAL partition leaves no room for etcd's data directory and the control plane images."
+  }
+}
+
+variable "worker_root_volume_size" {
+  type        = number
+  default     = 50
+  description = "Size of the baseline worker root volume in GiB. This is where container images and ephemeral storage live, so it is the one to raise for an image-heavy workload."
+
+  validation {
+    condition     = var.worker_root_volume_size >= 20
+    error_message = "worker_root_volume_size must be at least 20 GiB: below that the EPHEMERAL partition leaves no room for container images."
+  }
+}

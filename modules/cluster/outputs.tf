@@ -28,9 +28,14 @@ output "control_plane_autoscaling_group_name" {
   description = "Name of the control plane autoscaling group."
 }
 
-output "talos_ami_id" {
-  value       = module.compute.talos_ami_id
-  description = "AMI the cluster nodes boot from."
+output "control_plane_ami_id" {
+  value       = module.compute.control_plane_ami_id
+  description = "AMI the control plane nodes boot from."
+}
+
+output "worker_ami_id" {
+  value       = module.compute.worker_ami_id
+  description = "AMI the worker nodes boot from, and the one Karpenter launches with."
 }
 
 # The credentials themselves, not paths to them. A caller needs these to
@@ -104,7 +109,8 @@ output "bootstrap_inputs" {
     node_count                      = var.control_plane_nodes + var.worker_nodes_min
     worker_instance_profile_name    = module.compute.worker_instance_profile_name
     worker_iam_role_arn             = module.compute.worker_iam_role_arn
-    worker_ami_id                   = module.compute.talos_ami_id
+    worker_ami_id                   = module.compute.worker_ami_id
+    worker_architecture             = module.compute.worker_architecture
     karpenter_worker_machine_config = module.talos_config.karpenter_worker_machine_config
 
     # IRSA. The bucket is created by the bootstrap module, but named here:
