@@ -1,0 +1,52 @@
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bd prime"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/beads-session-start.sh",
+            "statusMessage": "Syncing beads\u2026"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/beads-session-end.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(bd*)",
+      "Bash(flox activate -- bd*)",
+      "Bash(flox activate -- tofu fmt*)",
+      "Bash(flox activate -- tofu validate*)",
+      "Bash(tofu fmt*)",
+      "Bash(tofu validate*)",
+      "Bash(git log*)",
+      "Bash(git diff*)",
+      "Bash(git status*)",
+      "Bash(git show*)"
+    ]
+  }
+}

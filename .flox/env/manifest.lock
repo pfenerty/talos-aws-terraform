@@ -1,0 +1,724 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.18.0",
+    "install": {
+      "awscli2": {
+        "pkg-path": "awscli2"
+      },
+      "beads": {
+        "pkg-path": "beads",
+        "version": "1.3.2"
+      },
+      "kubescape": {
+        "pkg-path": "kubescape"
+      },
+      "nushell": {
+        "pkg-path": "nushell"
+      },
+      "opentofu": {
+        "pkg-path": "opentofu"
+      },
+      "repomix": {
+        "pkg-path": "repomix"
+      },
+      "talosctl": {
+        "pkg-path": "talosctl"
+      }
+    },
+    "hook": {},
+    "profile": {},
+    "options": {}
+  },
+  "packages": [
+    {
+      "attr_path": "awscli2",
+      "broken": false,
+      "derivation": "/nix/store/1q5cj7rq36h6ng7dklzs2yyq4cig9pka-awscli2-2.36.31.drv",
+      "description": "Unified tool to manage your AWS services",
+      "install_id": "awscli2",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "awscli2-2.36.31",
+      "pname": "awscli2",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T05:52:01.839669Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "2.36.31",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/l2a87i18pq0jxnygjy7nsxjr7xbvrz0f-awscli2-2.36.31-dist",
+        "out": "/nix/store/0ylkfs6x0gyfz14by8idac0ig0rib756-awscli2-2.36.31"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "awscli2",
+      "broken": false,
+      "derivation": "/nix/store/i9dgnzj6y3jix5lblrs21qx95lv8wvpa-awscli2-2.36.31.drv",
+      "description": "Unified tool to manage your AWS services",
+      "install_id": "awscli2",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "awscli2-2.36.31",
+      "pname": "awscli2",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:21:03.029128Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "2.36.31",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/dl1bfnjfg48d5hq0f15d4b54hz51sq9k-awscli2-2.36.31-dist",
+        "out": "/nix/store/vp5jagxvkcn1ag0788jc5bk1k61dfbw3-awscli2-2.36.31"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "awscli2",
+      "broken": false,
+      "derivation": "/nix/store/7ci0xpm9r7hy52s1dp5c3mgfnrkvlvl6-awscli2-2.36.31.drv",
+      "description": "Unified tool to manage your AWS services",
+      "install_id": "awscli2",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "awscli2-2.36.31",
+      "pname": "awscli2",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:52:55.340790Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "2.36.31",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/22f07rj0brakblwn55vfdjx0qpj34726-awscli2-2.36.31-dist",
+        "out": "/nix/store/mfvvq20wz2lammngmk51lk1czzlw03m1-awscli2-2.36.31"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "beads",
+      "broken": false,
+      "derivation": "/nix/store/5f2qxc8xkrnhrzh6m9lwxvpfq7q84xd8-beads-1.3.2.drv",
+      "description": "Lightweight memory system for AI coding agents with graph-based issue tracking",
+      "install_id": "beads",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "beads-1.3.2",
+      "pname": "beads",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T05:52:01.841770Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.3.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/xdjhh7ssg3f83mfwv48l9q2yqs2jxxkz-beads-1.3.2"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "beads",
+      "broken": false,
+      "derivation": "/nix/store/lc5d3fwh25mhl2qfyy75jvzsxmnp16dz-beads-1.3.2.drv",
+      "description": "Lightweight memory system for AI coding agents with graph-based issue tracking",
+      "install_id": "beads",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "beads-1.3.2",
+      "pname": "beads",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:21:03.031387Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.3.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/fba75pjdiclgpz9v7avj0s0qbkdjwd3q-beads-1.3.2"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "beads",
+      "broken": false,
+      "derivation": "/nix/store/2v5xmymag3bylb36vvljczkn7jy8snmm-beads-1.3.2.drv",
+      "description": "Lightweight memory system for AI coding agents with graph-based issue tracking",
+      "install_id": "beads",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "beads-1.3.2",
+      "pname": "beads",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:52:55.342495Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.3.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/pa1q3cbmpg28l81r1cpxx6haprw4mdr3-beads-1.3.2"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "kubescape",
+      "broken": false,
+      "derivation": "/nix/store/0qkcv0ha2an817p5r4vbf0wsjy715rif-kubescape-4.0.20.drv",
+      "description": "Tool for testing if Kubernetes is deployed securely",
+      "install_id": "kubescape",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "kubescape-4.0.20",
+      "pname": "kubescape",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T05:52:01.978958Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "4.0.20",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/6vq9kybrj3hzwxgyci1y9x6v9myjr8sp-kubescape-4.0.20"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "kubescape",
+      "broken": false,
+      "derivation": "/nix/store/minlkrr8606cx2ja4348xl5chw2ihm5j-kubescape-4.0.20.drv",
+      "description": "Tool for testing if Kubernetes is deployed securely",
+      "install_id": "kubescape",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "kubescape-4.0.20",
+      "pname": "kubescape",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:21:03.173805Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "4.0.20",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/iaiviw30r4hz8cqldn66fapqlch6v2hm-kubescape-4.0.20"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "kubescape",
+      "broken": false,
+      "derivation": "/nix/store/8hdqz9wij4pxbwy0jy96chqln5s83svq-kubescape-4.0.20.drv",
+      "description": "Tool for testing if Kubernetes is deployed securely",
+      "install_id": "kubescape",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "kubescape-4.0.20",
+      "pname": "kubescape",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:52:55.467407Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "4.0.20",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/wf8jhnj74gcg93v40cki52hmz3a5i0d6-kubescape-4.0.20"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "nushell",
+      "broken": false,
+      "derivation": "/nix/store/3ayij26m25240bmzyyjld2hii8x695hh-nushell-0.116.1.drv",
+      "description": "Modern shell written in Rust",
+      "install_id": "nushell",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "nushell-0.116.1",
+      "pname": "nushell",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T05:52:02.016220Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "0.116.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/zdgmkyjvag3g9297nl0d2jqcydm9k83i-nushell-0.116.1"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "nushell",
+      "broken": false,
+      "derivation": "/nix/store/9agxjjy9jspwl5wdp6zrcyw79crqn7ay-nushell-0.116.1.drv",
+      "description": "Modern shell written in Rust",
+      "install_id": "nushell",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "nushell-0.116.1",
+      "pname": "nushell",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:21:03.315477Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "0.116.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/dhfn54h4jj4npw7f1nnmiawgdpdbjwaa-nushell-0.116.1"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "nushell",
+      "broken": false,
+      "derivation": "/nix/store/43fijrh2cdzma8dl7zgg3p7fw1jrx1gs-nushell-0.116.1.drv",
+      "description": "Modern shell written in Rust",
+      "install_id": "nushell",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "nushell-0.116.1",
+      "pname": "nushell",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:52:55.515321Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "0.116.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/q7bya591hrzv5xdh61m2kx0kf00y8zpr-nushell-0.116.1"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "opentofu",
+      "broken": false,
+      "derivation": "/nix/store/6n29cjxr08sqkzlfcnjjv08swnb189hv-opentofu-1.13.9.drv",
+      "description": "Tool for building, changing, and versioning infrastructure",
+      "install_id": "opentofu",
+      "license": "MPL-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "opentofu-1.13.9",
+      "pname": "opentofu",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T05:52:02.029906Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.13.9",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/fijv8nydw8y3ssdi1cj2wjnx8p4bysh6-opentofu-1.13.9"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "opentofu",
+      "broken": false,
+      "derivation": "/nix/store/qnp3n3h5wxh9krfzrjnh6g69jf2pgd2a-opentofu-1.13.9.drv",
+      "description": "Tool for building, changing, and versioning infrastructure",
+      "install_id": "opentofu",
+      "license": "MPL-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "opentofu-1.13.9",
+      "pname": "opentofu",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:21:03.334983Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.13.9",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/psf8b618kj9kv2ygb320w8cznlb6c45x-opentofu-1.13.9"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "opentofu",
+      "broken": false,
+      "derivation": "/nix/store/ybiwdwy86mpc66dx95fznnldfcrq4khr-opentofu-1.13.9.drv",
+      "description": "Tool for building, changing, and versioning infrastructure",
+      "install_id": "opentofu",
+      "license": "MPL-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "opentofu-1.13.9",
+      "pname": "opentofu",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:52:55.529162Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.13.9",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/60vqi4v8n11afd5ks89j1kn7pgwfrww5-opentofu-1.13.9"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "repomix",
+      "broken": false,
+      "derivation": "/nix/store/1b545i7p8ds22i578p8s4m8fvyb3w0zr-repomix-1.18.0.drv",
+      "description": "Tool to pack repository contents to single file for AI consumption",
+      "install_id": "repomix",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "repomix-1.18.0",
+      "pname": "repomix",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T05:52:02.234233Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.18.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/4qllhfhk6dwijp20ng95cvm6y06ycz00-repomix-1.18.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "repomix",
+      "broken": false,
+      "derivation": "/nix/store/95n9vps69vsrrllhpv2lzn8hddczp68w-repomix-1.18.0.drv",
+      "description": "Tool to pack repository contents to single file for AI consumption",
+      "install_id": "repomix",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "repomix-1.18.0",
+      "pname": "repomix",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:21:03.488272Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.18.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/akrd09vcm8rrcvgy02n51l6q3f2y7ykj-repomix-1.18.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "repomix",
+      "broken": false,
+      "derivation": "/nix/store/qdp415slxg5mmi66f66461rzdxhvrsi0-repomix-1.18.0.drv",
+      "description": "Tool to pack repository contents to single file for AI consumption",
+      "install_id": "repomix",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "repomix-1.18.0",
+      "pname": "repomix",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:52:55.652521Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.18.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/xp2212yi06h3gg2g7crgzxw68yx6vv5z-repomix-1.18.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "talosctl",
+      "broken": false,
+      "derivation": "/nix/store/szi8x7ynnf5d5yz0x8x25xy4p0x43jav-talosctl-1.14.5.drv",
+      "description": "CLI for out-of-band management of Kubernetes nodes created by Talos",
+      "install_id": "talosctl",
+      "license": "MPL-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "talosctl-1.14.5",
+      "pname": "talosctl",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T05:52:02.287699Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.14.5",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/pms9h9rg73pfxlzpmy0542da50q5dfa7-talosctl-1.14.5"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "talosctl",
+      "broken": false,
+      "derivation": "/nix/store/5nma59f3h18kc1vflg0aga81kcf5i3jd-talosctl-1.14.5.drv",
+      "description": "CLI for out-of-band management of Kubernetes nodes created by Talos",
+      "install_id": "talosctl",
+      "license": "MPL-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "talosctl-1.14.5",
+      "pname": "talosctl",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:21:03.528556Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.14.5",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/80qncimfz78wfdmzz906hip14vir18vs-talosctl-1.14.5"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "talosctl",
+      "broken": false,
+      "derivation": "/nix/store/6kjn5c77p9s4malpln415ng179rzgrff-talosctl-1.14.5.drv",
+      "description": "CLI for out-of-band management of Kubernetes nodes created by Talos",
+      "install_id": "talosctl",
+      "license": "MPL-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "name": "talosctl-1.14.5",
+      "pname": "talosctl",
+      "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+      "rev_count": 1117658,
+      "rev_date": "2026-11-11T08:42:49Z",
+      "scrape_date": "2026-11-13T06:52:55.691965Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.14.5",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/phigrhg2pdbdsxy1kgbq9fgi8xm282fb-talosctl-1.14.5"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ],
+  "compose": {
+    "composer": {
+      "schema-version": "1.18.0",
+      "install": {
+        "awscli2": {
+          "pkg-path": "awscli2"
+        },
+        "kubescape": {
+          "pkg-path": "kubescape"
+        },
+        "opentofu": {
+          "pkg-path": "opentofu"
+        },
+        "talosctl": {
+          "pkg-path": "talosctl"
+        }
+      },
+      "hook": {},
+      "profile": {},
+      "options": {},
+      "include": {
+        "environments": [
+          {
+            "dir": "../../common"
+          }
+        ]
+      }
+    },
+    "include": [
+      {
+        "manifest": {
+          "schema-version": "1.12.0",
+          "install": {
+            "beads": {
+              "pkg-path": "beads",
+              "version": "1.3.2"
+            },
+            "nushell": {
+              "pkg-path": "nushell"
+            },
+            "repomix": {
+              "pkg-path": "repomix"
+            }
+          },
+          "hook": {},
+          "profile": {},
+          "options": {}
+        },
+        "name": "planning",
+        "descriptor": {
+          "dir": "../../common"
+        }
+      }
+    ],
+    "warnings": []
+  }
+}
