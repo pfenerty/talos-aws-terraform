@@ -141,7 +141,7 @@ variable "hardening" {
     kubelet_serving_certificates   = optional(bool, false)
   })
   default     = {}
-  description = "Machine config hardening, off by default because it changes what the cluster will admit. Passed through to the Talos config module; see docs/hardening.md for what it covers, what it deliberately leaves alone, and what has to be enforced outside the machine config. kubelet_serving_certificates additionally requires a CSR approver deployed by Flux; see the doc before enabling it."
+  description = "Machine config hardening, off by default because it changes what the cluster will admit. Passed through to the Talos config module; see docs/hardening.md for what it covers, what it deliberately leaves alone, and what has to be enforced outside the machine config. kubelet_serving_certificates additionally requires a CSR approver running in the cluster. The bootstrap module installs one when it is told the setting is on (its kubelet_csr_approver_enabled input); if this module is used without it, one has to be provided, or kubectl logs, exec and port-forward stop working."
 }
 
 variable "machine_config_updates" {

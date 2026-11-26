@@ -255,11 +255,25 @@ for how, and for the one case that still needs a reboot.
 
 `hardening.kubelet_serving_certificates` is separate and opt-in. It makes the
 kubelet bootstrap a CA-signed serving certificate instead of self-signing one,
-and the API server verify it - but it needs a kubelet-serving CSR approver
-running in the cluster, which is a Flux dependency this module cannot install.
-Enable it without one and nodes still register and run pods, while `kubectl
-logs`, `exec`, `port-forward` and metrics-server stop working until the CSRs
-are approved. Install the approver first.
+and the API server verify it. That needs a kubelet-serving CSR approver in the
+cluster, because kube-controller-manager will not approve those requests
+itself, so turning it on also installs
+[`kubelet-csr-approver`](https://github.com/postfinance/kubelet-csr-approver)
+during bootstrap, after Cilium, and the cluster health check waits for it.
+Without an approver nodes would still register and run pods, while `kubectl
+logs`, `exec`, `port-forward` and metrics-server stopped working, and Talos
+would report the control plane's static pods as missing, until the requests
+were approved.
+
+The approver follows Cilium's ownership model: Terraform creates the release
+(`kube-system-kubelet-csr-approver` in `kube-system`) and never touches it
+again, so `kubelet_csr_approver_version` only affects new clusters, and Flux can
+adopt it with a `HelmRelease` of the same name and namespace. It accepts only
+requests whose name matches the private DNS names EC2 gives the nodes in the
+cluster's region and whose addresses fall inside the VPC CIDR. On a cluster
+that is already running, turning the setting on briefly leaves `logs` and
+`exec` failing, until the approver is installed and has approved each node's
+request.
 
 The doc also carries a rule-by-rule coverage matrix for all 92 rules of the
 DISA Kubernetes STIG, marking each as covered here, owed by the Flux bootstrap
@@ -632,7 +646,7 @@ MIT.
 | helm | ~> 3.3 |
 | kubernetes | ~> 3.2 |
 | local | ~> 2.9 |
-| talos | ~> 0.11 |
+| talos | ~> 0.12 |
 | tls | ~> 4.4 |
 
 ## Providers
@@ -664,7 +678,7 @@ No resources.
 | control\_plane\_nodes | Number of control plane nodes. etcd needs an odd number to hold quorum; 1 is fine for a throwaway cluster but has no redundancy, and an instance refresh will briefly take the API server away. | `number` | `1` | no |
 | control\_plane\_root\_volume\_size | Size of the control plane root volume in GiB. Talos itself needs very little; this is sized for etcd's data directory and the control plane images. | `number` | `50` | no |
 | enable\_cross\_zone\_load\_balancing | Let each load balancer node forward to control plane targets in any Availability Zone. On by default, because with fewer control plane nodes than subnets some zones hold no target at all and the API would be unreachable through them. Turning it off avoids inter-AZ transfer charges on API traffic, and is only safe with a control plane node in every subnet the balancer spans. | `bool` | `true` | no |
-| hardening | Machine config hardening, off by default because it changes what the cluster will admit. `enabled` turns on a real API server audit policy and Pod Security Admission enforcing the standard named below. It is the machine config half of a hardening baseline and not the whole of one: docs/hardening.md sets out what it covers, what Talos already does without it, and what has to be enforced in the Flux repository or the AWS layer instead. `kubelet_serving_certificates` makes the kubelet bootstrap a CA-signed serving certificate rather than self-signing one, and requires a CSR approver running in the cluster - a Flux dependency this module cannot install, and without which `kubectl logs` and `exec` stop working. | <pre>object({<br/>    enabled                        = optional(bool, false)<br/>    pod_security_enforce           = optional(string, "restricted")<br/>    pod_security_exempt_namespaces = optional(list(string), ["kube-system"])<br/>    kubelet_serving_certificates   = optional(bool, false)<br/>  })</pre> | `{}` | no |
+| hardening | Machine config hardening, off by default because it changes what the cluster will admit. `enabled` turns on a real API server audit policy and Pod Security Admission enforcing the standard named below. It is the machine config half of a hardening baseline and not the whole of one: docs/hardening.md sets out what it covers, what Talos already does without it, and what has to be enforced in the Flux repository or the AWS layer instead. `kubelet_serving_certificates` makes the kubelet bootstrap a CA-signed serving certificate rather than self-signing one, and the API server verify it. That needs a CSR approver in the cluster, because kube-controller-manager will not approve kubelet serving requests itself, so turning it on also installs kubelet-csr-approver during bootstrap, and Flux can adopt the release afterwards. | <pre>object({<br/>    enabled                        = optional(bool, false)<br/>    pod_security_enforce           = optional(string, "restricted")<br/>    pod_security_exempt_namespaces = optional(list(string), ["kube-system"])<br/>    kubelet_serving_certificates   = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | hubble\_ca\_validity\_hours | Lifetime of the self-signed Hubble trust anchor, in hours. The default of 12 is carried over from before this was configurable and is almost certainly too short for a CA that cert-manager issues from - raise it, or move the trust anchor to cert-manager entirely. | `number` | `12` | no |
 | karpenter | Karpenter provisioning policy, published into the karpenter-config secret for the NodePool in the Flux bootstrap repository to read. `capacity_types` is the set of EC2 purchase options the NodePool may provision; allowing spot is the single largest lever on the cost of elastic capacity, and is safe here because this module creates the interruption queue Karpenter drains reclaimed nodes from. Drop to ["on-demand"] for workloads that cannot absorb a two-minute interruption notice. | <pre>object({<br/>    capacity_types = optional(list(string), ["spot", "on-demand"])<br/>  })</pre> | `{}` | no |
 | kubernetes\_api\_allowed\_cidr | CIDR allowed to reach the Kubernetes API on port 6443. Open to the internet by default; narrow it to your own address where you can. | `string` | `"0.0.0.0/0"` | no |

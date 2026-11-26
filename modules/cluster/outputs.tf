@@ -123,6 +123,7 @@ output "bootstrap_inputs" {
     # instance metadata service.
     vpc_id    = module.networking.vpc_id
     subnet_id = module.networking.public_subnets[0]
+    vpc_cidr  = var.vpc_cidr
 
     # Admin credentials, for reading the API server's OIDC discovery
     # documents over mutual TLS.
