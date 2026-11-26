@@ -300,8 +300,8 @@ Terraform owns the AWS side and the handoff to Flux:
   interruption and health events into it.
 * `karpenter.sh/discovery = <project name>` tags on the subnets and on the
   internal security group, which is how the `EC2NodeClass` selects them.
-* A `karpenter-config` secret in `flux-system`, and a `karpenter-aws-config`
-  ConfigMap in `kube-system`.
+* `karpenter-config` and `karpenter-vars` secrets in `flux-system`, and a
+  `karpenter-aws-config` ConfigMap in `kube-system`.
 
 The Karpenter `HelmRelease`, `EC2NodeClass` and `NodePool` live in the Flux
 bootstrap repository and read those. `karpenter-config` carries
@@ -310,6 +310,13 @@ EKS), `region`, `interruption-queue`, `discovery-tag`,
 `node-instance-profile`, `node-ami-id`, `node-user-data`, `node-architecture`
 and `capacity-types`, and the `HelmRelease` reads it through `valuesFrom`,
 which resolves secrets in the `HelmRelease`'s own namespace.
+
+`karpenter-vars` carries the node facts again for the `EC2NodeClass` and
+`NodePool`, which are plain manifests read through `postBuild.substituteFrom`.
+It is a separate secret because substitution rejects any key that isn't a
+valid identifier, and every `karpenter-config` key has a dash. Its keys are
+`cluster_name`, `discovery_tag`, `node_instance_profile`, `node_ami_id`,
+`node_architecture`, `node_user_data` and `capacity_types`.
 
 The second object exists because the controller's AWS identity is not a chart
 value: it is read from the environment, and the chart's only hook for that is
@@ -331,18 +338,26 @@ EventBridge rules above are exactly what lets Karpenter see a reclamation
 notice and drain the node inside its two-minute window. It is the single
 largest lever on what elastic capacity costs - see [Cost](#cost).
 
-`capacity-types` is comma-separated, because a `Secret`'s values are strings
-and the `NodePool` schema wants a list. The Flux repository does the split:
+Substitution is a plain string replace, so in `karpenter-vars` the two values
+that are not simple scalars are JSON-encoded: `capacity_types` is a JSON
+array, which is a YAML flow sequence, and `node_user_data` is a JSON string,
+which is a YAML double-quoted scalar with its newlines escaped. Both are used
+bare:
 
 ```yaml
-# clusters/<project_name>/karpenter/nodepool.yaml
+# NodePool
 requirements:
   - key: kubernetes.io/arch
     operator: In
     values: ["${node_architecture}"]
   - key: karpenter.sh/capacity-type
     operator: In
-    values: [${capacity_types}]
+    values: ${capacity_types}
+---
+# EC2NodeClass
+spec:
+  amiFamily: Custom
+  userData: ${node_user_data}
 ```
 
 Terraform publishes the values; the `NodePool` has to be wired to read them.
@@ -353,9 +368,10 @@ Until it is, `var.karpenter` changes nothing about what Karpenter provisions.
 generate the user data, so the config carries
 `--register-with-taints=karpenter.sh/unregistered:NoExecute` itself - Karpenter
 requires that taint on nodes it launches and removes it once the `NodeClaim` is
-registered. And the value is multi-line, so it has to reach the `EC2NodeClass`
-through a `HelmRelease` `valuesFrom` `targetPath`; Flux `postBuild`
-substitution is a plain string replace and would break the YAML indentation.
+registered. And the value is multi-line, which is why `karpenter-vars` carries
+it JSON-encoded: substituted raw, a string replace would break the YAML
+indentation. Flux doesn't rescan substituted text, so a `$` inside the
+machine config needs no escaping.
 
 ## Flux bootstrap repository
 
@@ -405,9 +421,8 @@ spec:
         optional: false
 ```
 
-`postBuild` substitution is a plain string replace - which is why
-`karpenter-config` could not use it for a multi-line machine config, and why
-it is fine here. It applies to every manifest the Kustomization renders, so a
+`postBuild` substitution is a plain string replace - which is why the machine
+config in `karpenter-vars` is JSON-encoded, and why a version needs nothing. It applies to every manifest the Kustomization renders, so a
 literal `$` anywhere under that path has to be escaped as `$$`.
 
 Both keys carry a leading `v`, which is what the upgrade resources validate

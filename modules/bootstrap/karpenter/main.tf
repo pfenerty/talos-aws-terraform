@@ -166,6 +166,37 @@ resource "kubernetes_secret_v1" "this" {
   }
 }
 
+# The same node facts as above, shaped for Flux postBuild.substituteFrom, which
+# is how the EC2NodeClass and NodePool in talos-aws-gitops read them: plain
+# manifests, no chart.
+#
+# A second secret rather than new keys on the first, because substituteFrom
+# fails the whole Kustomization on any key that is not a valid identifier, and
+# every key above has a dash in it.
+#
+# Substitution is a plain string replace, so each value has to be a single
+# line that is already valid YAML where it lands. jsonencode does both: a JSON
+# string is a YAML double-quoted scalar, newlines and quotes escaped, and a
+# JSON array is a YAML flow sequence. Flux does not rescan substituted text,
+# so a `$` inside the machine config is left alone. The manifests use them
+# bare: `userData: ${node_user_data}`, `values: ${capacity_types}`.
+resource "kubernetes_secret_v1" "vars" {
+  metadata {
+    name      = "karpenter-vars"
+    namespace = "flux-system"
+  }
+
+  data = {
+    cluster_name          = var.project_name
+    discovery_tag         = var.project_name
+    node_instance_profile = var.node_instance_profile_name
+    node_ami_id           = var.node_ami_id
+    node_architecture     = var.node_architecture
+    node_user_data        = jsonencode(var.node_user_data)
+    capacity_types        = jsonencode(var.capacity_types)
+  }
+}
+
 # Read by the controller through `envFrom`. Separate from the secret above,
 # and in the controller's own namespace, because an environment variable has
 # to come from an object in the pod's namespace - `valuesFrom` resolves in the
