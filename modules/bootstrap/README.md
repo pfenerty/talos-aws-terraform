@@ -67,6 +67,7 @@ publishes the values that repository reads:
 | `karpenter-config` secret | `flux-system` | `extras.karpenter`. Read by `valuesFrom`, which resolves secrets in the HelmRelease's namespace. |
 | `cloud-controller-manager-aws-config` ConfigMap | `kube-system` | Flux enabled. `cloud.conf` for `--cloud-config`, and a shared AWS config file naming the role to assume. |
 | `ebs-csi-driver-aws-config` ConfigMap | `kube-system` | `extras.ebs`. `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_REGION`. |
+| `karpenter-vars` secret | `flux-system` | `extras.karpenter`. The node facts again, for the `EC2NodeClass` and `NodePool` through `postBuild.substituteFrom`: identifier keys, with `node_user_data` and `capacity_types` JSON-encoded so each substitutes as one line of valid YAML. |
 | `karpenter-aws-config` ConfigMap | `kube-system` | `extras.karpenter`. The same three variables. |
 | `aws-loadbalancer-config` secret | `flux-system` | Flux enabled. Nothing in the bootstrap repository reads it today. |
 
