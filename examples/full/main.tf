@@ -111,7 +111,7 @@ module "talos_cluster" {
   # that a default cluster admits. docs/hardening.md covers what this does,
   # and what it cannot do from a machine config.
   hardening = {
-    enabled                        = true
+    enabled                      = true
     kubelet_serving_certificates = true
   }
 
