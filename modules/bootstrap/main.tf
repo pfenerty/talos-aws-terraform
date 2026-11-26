@@ -1,5 +1,46 @@
 data "aws_caller_identity" "current" {}
 
+# Waits for the Kubernetes API to answer through the load balancer before
+# anything talks to it. Nothing earlier in the apply does: the kubeconfig comes
+# from the Talos API on port 50000, which is up as soon as the machine boots,
+# and talos_machine_bootstrap returns once etcd has been told to bootstrap, not
+# once kube-apiserver is serving. kube-apiserver then needs a minute or two to
+# start, and the NLB needs several health checks to pass before it forwards a
+# connection. The helm and kubernetes providers dial once and do not retry, so
+# without this the first thing to touch the cluster fails with
+# `Kubernetes cluster unreachable ... i/o timeout` on a cluster that is
+# perfectly healthy a minute later.
+#
+# /readyz rather than /livez: it only succeeds once the API server has finished
+# its post-start hooks, RBAC bootstrap included, which is what an install needs.
+# Read over mutual TLS with the admin certificate, as the OIDC documents are,
+# so it does not depend on anonymous access to health endpoints being enabled.
+#
+# Retries cover connection errors and 5xx, which is everything the API server
+# and the load balancer do while starting. The budget is about seven minutes
+# worst case; a healthy cluster answers on the first attempt.
+data "http" "api_ready" {
+  url             = "${var.cluster.cluster_endpoint}/readyz"
+  ca_cert_pem     = var.cluster.kubernetes_client_configuration.ca_certificate
+  client_cert_pem = var.cluster.kubernetes_client_configuration.client_certificate
+  client_key_pem  = var.cluster.kubernetes_client_configuration.client_key
+
+  request_timeout_ms = 8000
+
+  retry {
+    attempts     = 30
+    min_delay_ms = 2000
+    max_delay_ms = 6000
+  }
+
+  lifecycle {
+    postcondition {
+      condition     = self.status_code == 200
+      error_message = "The Kubernetes API answered ${self.status_code} on /readyz through the load balancer. The control plane is not healthy; check `talosctl containers -k` and the kube-apiserver log on a control plane node."
+    }
+  }
+}
+
 # Cilium first, and before the health check below. Talos runs with `cni: none`
 # and kube-proxy disabled, so until a CNI exists CoreDNS cannot start and every
 # node stays NotReady - which is exactly what talos_cluster_health waits for.
@@ -14,9 +55,26 @@ data "aws_caller_identity" "current" {}
 # so they need neither kube-proxy nor DNS.
 module "cilium" {
   source                   = "./cilium"
+  depends_on               = [data.http.api_ready]
   cilium_version           = var.cilium_bootstrap_version
   operator_replicas        = min(2, var.cluster.node_count)
   hubble_ca_validity_hours = var.hubble_ca_validity_hours
+}
+
+# The kubelet serving certificate approver, for hardening.kubelet_serving_certificates.
+# After Cilium, because it is a pod and needs a node that can run one. The
+# health check below waits for it: with serverTLSBootstrap on, a control plane
+# kubelet cannot answer Talos's static pod status query until its serving
+# request is approved, so the cluster does not report healthy without it.
+module "kubelet_csr_approver" {
+  count = var.kubelet_csr_approver_enabled ? 1 : 0
+
+  source        = "./csr-approver"
+  depends_on    = [module.cilium]
+  chart_version = var.kubelet_csr_approver_version
+  region        = var.cluster.region
+  vpc_cidr      = var.cluster.vpc_cidr
+  replicas      = min(2, var.cluster.node_count)
 }
 
 # Blocks until the cluster reports healthy - etcd quorum, kubelet up on every
@@ -24,7 +82,7 @@ module "cilium" {
 # and hoping. This is the Talos provider's own readiness check, so it knows
 # what healthy means; a timer did not.
 data "talos_cluster_health" "this" {
-  depends_on = [module.cilium]
+  depends_on = [module.cilium, module.kubelet_csr_approver]
 
   client_configuration = var.cluster.client_configuration
   control_plane_nodes  = var.cluster.control_plane_private_ips
