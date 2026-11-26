@@ -115,6 +115,13 @@ module "talos_cluster" {
     kubelet_serving_certificates = true
   }
 
+  # tuppr, in talos-aws-gitops's infrastructure layer, upgrades Talos through
+  # the Talos API from its own namespace. docs/hardening.md covers what the
+  # grant costs.
+  kubernetes_talos_api_access = {
+    enabled = true
+  }
+
   post_install = {
     flux   = var.flux
     extras = var.extras

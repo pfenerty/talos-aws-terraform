@@ -210,7 +210,8 @@ configs rendered by this module.
 Cluster policy. None of it can be expressed in a machine config, and all of it
 needs continuous reconciliation rather than a one-time apply. **None of this
 exists yet** - it is a list of what the bootstrap repository owes, not a
-description of what it does.
+description of what it does. In talos-aws-gitops it is the policy layer,
+tracked as gitops-6mh.
 
 | Rule | Control |
 |---|---|
