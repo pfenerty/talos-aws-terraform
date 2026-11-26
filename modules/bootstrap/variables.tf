@@ -35,6 +35,10 @@ variable "cluster" {
     vpc_id    = string
     subnet_id = string
 
+    # The kubelet serving certificate approver only accepts requests for
+    # addresses inside it.
+    vpc_cidr = string
+
     # Admin credentials for the Kubernetes API, used to read the cluster's
     # own OIDC discovery documents. The endpoints are not anonymous.
     kubernetes_client_configuration = object({
@@ -131,6 +135,19 @@ variable "cilium_bootstrap_version" {
   type        = string
   default     = "1.20.2"
   description = "Cilium chart version installed to get the cluster to Ready. Changing it affects new clusters only: on an existing cluster Cilium belongs to Flux, and this module deliberately stops reconciling the release after creating it."
+}
+
+variable "kubelet_csr_approver_enabled" {
+  type        = bool
+  default     = false
+  description = "Install the kubelet serving certificate approver. Set it to the cluster's hardening.kubelet_serving_certificates: that setting makes the kubelets request serving certificates from the cluster CA, and without an approver those requests stay pending and kubectl logs, exec, port-forward and metrics-server stop working."
+}
+
+# renovate: datasource=helm depName=kubelet-csr-approver registryUrl=https://postfinance.github.io/kubelet-csr-approver
+variable "kubelet_csr_approver_version" {
+  type        = string
+  default     = "1.2.16"
+  description = "kubelet-csr-approver chart version installed when kubelet_csr_approver_enabled is set. Changing it affects new clusters only: this module stops reconciling the release after creating it, so Flux can adopt it."
 }
 
 variable "hubble_ca_validity_hours" {

@@ -109,10 +109,23 @@ resource "aws_s3_bucket_policy" "this" {
 }
 
 locals {
-  # The paths the API server's own discovery document names. `jwks_uri` is
-  # derived by Kubernetes as <issuer>/openid/v1/jwks unless it is set
-  # explicitly, and it is not, so the object key has to mirror that path.
+  # The object keys follow the paths the API server serves these documents at,
+  # so the issuer URL plus the path is also where each one is published.
   object_keys = [".well-known/openid-configuration", "openid/v1/jwks"]
+
+  # The API server's discovery document, with jwks_uri pointed at the bucket.
+  #
+  # Left to itself the API server does not derive jwks_uri from the issuer. It
+  # advertises its own address - https://<node private ip>:6443/openid/v1/jwks -
+  # which AWS cannot reach, and AWS fetches the signing keys from exactly that
+  # URL whenever it verifies a token. The document would be published, the
+  # identity provider would exist, and every AssumeRoleWithWebIdentity call
+  # would fail with a key retrieval error. Everything else in it, the issuer
+  # included, is the API server's own.
+  openid_configuration = jsonencode(merge(
+    jsondecode(data.http.openid_configuration.response_body),
+    { jwks_uri = "${var.issuer_url}/${local.object_keys[1]}" },
+  ))
 }
 
 # Read over mutual TLS with the admin client certificate. The discovery
@@ -161,7 +174,7 @@ data "http" "jwks" {
 resource "aws_s3_object" "openid_configuration" {
   bucket        = aws_s3_bucket.this.id
   key           = local.object_keys[0]
-  content       = data.http.openid_configuration.response_body
+  content       = local.openid_configuration
   content_type  = "application/json"
   cache_control = "public, max-age=300"
 
@@ -178,6 +191,37 @@ resource "aws_s3_object" "jwks" {
   tags = var.tags
 }
 
+# Reads the published discovery document back the way AWS will: anonymously,
+# over the public URL. Terraform's own S3 calls succeeding says nothing about
+# that. A bucket policy and a new object take a few seconds to be served
+# publicly, and an account-level S3 Block Public Access setting makes them
+# unreadable altogether, and CreateOpenIDConnectProvider reports both as
+# `OpenIdIdpCommunicationError: Could not connect`, which names neither. The
+# retry absorbs the first; the postcondition turns the second into an error
+# that says what is wrong.
+data "http" "published_openid_configuration" {
+  depends_on = [
+    aws_s3_object.openid_configuration,
+    aws_s3_object.jwks,
+    aws_s3_bucket_policy.this,
+  ]
+
+  url = "${var.issuer_url}/${local.object_keys[0]}"
+
+  retry {
+    attempts     = 12
+    min_delay_ms = 2000
+    max_delay_ms = 10000
+  }
+
+  lifecycle {
+    postcondition {
+      condition     = self.status_code == 200
+      error_message = "The OIDC discovery document is not publicly readable at ${var.issuer_url}/${local.object_keys[0]} (HTTP ${self.status_code}). AWS reads it anonymously to create the identity provider and to verify service account tokens. If the bucket policy applied, check for an account-level S3 Block Public Access setting, which overrides it."
+    }
+  }
+}
+
 # Created after the documents, not before: AWS fetches the discovery document
 # to work out the endpoint's certificate thumbprint, and would fail against an
 # empty bucket. The thumbprint is left for AWS to retrieve rather than pinned
@@ -187,6 +231,7 @@ resource "aws_iam_openid_connect_provider" "this" {
     aws_s3_object.openid_configuration,
     aws_s3_object.jwks,
     aws_s3_bucket_policy.this,
+    data.http.published_openid_configuration,
   ]
 
   url            = var.issuer_url

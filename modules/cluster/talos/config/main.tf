@@ -16,28 +16,34 @@
 #      patch adding an argument cannot drop an earlier one. This file used to
 #      merge its patches in HCL to avoid exactly that, which strategic merge
 #      does not in fact do.
-#   2. Lists append. Three fields in the whole of v1alpha1 are tagged
-#      merge:"replace" - cluster.network.podSubnets, cluster.network.serviceSubnets
-#      and cluster.apiServer.auditPolicy. Every other list-valued field appends
-#      to whatever is already there, and `talosctl gen config` populates several
-#      of them, so patching one naively duplicates its contents rather than
-#      replacing them.
+#   2. Lists append. Only KubeNetworkConfig.podSubnets and .serviceSubnets are
+#      overwritten on merge, and KubeAuditPolicyConfig.configuration is replaced
+#      whole. Every other list-valued field appends to whatever is already
+#      there, and `talosctl gen config` populates several of them, so patching
+#      one naively duplicates its contents rather than replacing them.
 #   3. To replace a list the generator already populated, delete it in one patch
 #      and set it in the next: a single patch may not modify the same document
 #      twice, so this needs two. See local.hardening_reset_patch.
 #   4. A patch may add configuration documents the generated config does not
-#      have, matched on apiVersion/kind/name - but only documents the provider's
-#      vendored machinery knows. See the version-skew note below.
+#      have, matched on apiVersion/kind/name, and may remove a generated one
+#      with `$patch: delete`.
 #
-# Version skew, deliberate: Talos 1.14 moves nearly all of the settings below
-# into dedicated configuration documents (KubeAPIServerConfig, KubeletConfig,
-# KubeAuditPolicyConfig, KubeAdmissionControlConfig, SysctlConfig, ...) and
-# deprecates the v1alpha1 fields they replace. Those documents are not reachable
-# from here yet: terraform-provider-talos 0.11.0 vendors Talos machinery 1.13,
-# which is what generates this configuration and applies these patches, and it
-# rejects document kinds it does not know - regardless of what var.talos_version
-# says the nodes will run. The deprecated fields still work in 1.14. Revisit
-# when the provider bumps its machinery; docs/hardening.md carries the mapping.
+# Documents, not v1alpha1 fields. Talos 1.14 moved nearly everything below out
+# of v1alpha1 into dedicated documents (UnattendedInstallConfig, KubeletConfig,
+# KubeNodeConfig, KubeNetworkConfig, KubeProxyConfig, KubeAPIServerConfig, ...)
+# and refuses a configuration that sets the same thing in both places. Which of
+# the two the generator writes depends on the machinery vendored by
+# terraform-provider-talos: 0.12 vendors Talos 1.14 and, given a 1.14
+# talos_version, writes the documents. A v1alpha1 patch for one of those settings
+# is then a conflict, and it is not caught at plan or apply time - the data
+# source does not validate what it renders - but by the node, at boot, when it
+# acquires its config from user data and rejects it. That is why versions.tf
+# requires provider 0.12 or later. Only what has no document yet is still
+# patched into v1alpha1: cluster.externalCloudProvider.
+#
+# Every document patched here is matched by kind, so a kind the generated config
+# does not carry is added rather than merged. `talosctl validate --mode cloud`
+# against the rendered files is the check that catches a mistake in this file.
 locals {
   # EC2 caps user data at 16 KB of raw, pre-base64 bytes, and on this platform
   # the machine config is the user data. Enforced by the postconditions below
@@ -45,81 +51,143 @@ locals {
   # limit. See "Machine config size" in the README.
   user_data_limit_bytes = 16384
 
-  # Applies to every machine whatever its role.
-  cluster_patch = {
-    cluster = {
-      network = {
-        cni = {
-          name = "none"
+  # Applies to every machine whatever its role. One patch, several documents:
+  # each kind appears once, which is all the "one patch, one modification per
+  # document" rule asks.
+  cluster_patch = join("\n---\n", [
+    # The only setting here that is still v1alpha1. This is what makes Talos
+    # pass `--cloud-provider=external` to the kubelet, and to kube-apiserver and
+    # kube-controller-manager on Kubernetes versions that still have the flag.
+    # Kubernetes 1.33 removed it from those two, and Talos leaves it off there.
+    # It must not be repeated in any extraArgs: kube-apiserver exits at startup
+    # on `unknown flag: --cloud-provider`, which takes the whole control plane
+    # with it.
+    yamlencode({
+      cluster = {
+        externalCloudProvider = {
+          enabled = true
         }
-        podSubnets = [var.pod_cidr]
       }
-      proxy = {
-        disabled = true
-      }
-      externalCloudProvider = {
-        enabled = true
-      }
-    }
-    machine = {
-      # `talosctl gen config` writes the installer image of the machinery that
-      # generated the config - 1.13.0, the version terraform-provider-talos
-      # 0.11.0 vendors - regardless of what var.talos_version says the nodes
-      # will run. It is inert for as long as a node only ever boots from the
-      # AMI, which is why it went unnoticed, and it is the wrong installer the
-      # moment anything upgrades a node in place: the node would install 1.13.0
-      # over whatever it was running.
-      #
-      # Same length as the string it replaces, so it costs nothing against the
-      # 16 KB user data ceiling.
-      install = {
+    }),
+
+    # Cilium is the CNI, installed by the bootstrap module, so the generated
+    # Flannel is removed outright: the document's presence is what deploys it.
+    # KubeNetworkConfig.podSubnets overwrites rather than appends, so this
+    # replaces the generator's 10.244.0.0/16 and needs no reset patch.
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "KubeFlannelCNIConfig"
+      "$patch"   = "delete"
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "KubeNetworkConfig"
+      podSubnets = [var.pod_cidr]
+    }),
+
+
+    # `talosctl gen config` writes the installer image of the machinery that
+    # generated the config - a factory.talos.dev metal-installer reference at
+    # the machinery's own version, 1.14.0 as of terraform-provider-talos 0.12 -
+    # regardless of what var.talos_version says the nodes will run. It is inert
+    # for as long as a node only ever boots from the AMI, which is why it went
+    # unnoticed, and it is the wrong installer the moment anything upgrades a
+    # node in place: the node would install that version over whatever it was
+    # running.
+    #
+    # The disk selector restates what the generator wrote, because a merge that
+    # does not carry it drops it and the document is then invalid (match is
+    # required). It matches nothing on AWS, where the root volume is an NVMe
+    # device, and that is fine: the install only runs on a node that is not yet
+    # installed to disk, and every node here boots from an AMI that is.
+    #
+    # Shorter than the string it replaces, so it costs nothing against the
+    # 16 KB user data ceiling.
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "UnattendedInstallConfig"
+      installer = {
         image = "ghcr.io/siderolabs/installer:${var.talos_version}"
       }
-
-      kubelet = {
-        extraArgs = {
-          cloud-provider = "external"
+      provisioning = {
+        diskSelector = {
+          match = "disk.dev_path == \"/dev/sda\""
         }
-        registerWithFQDN = true
+        wipe = false
       }
-    }
-  }
+    }),
+
+    # CoreDNS forwards to the VPC's resolver directly rather than through the
+    # host DNS cache. Talos's host DNS answers a node's own name with every
+    # address that node has - its VPC address, its public IP and its pod-network
+    # address - where the VPC resolver returns the VPC address alone. Anything
+    # that checks a node's name against its address then fails on whichever node
+    # CoreDNS happens to be running on: the kubelet serving certificate approver
+    # refuses a request when the name resolves to an address outside the VPC,
+    # which leaves that node's kubelet with no certificate and the cluster
+    # unable to report healthy. Host DNS itself stays on for the nodes. The
+    # cost is that CoreDNS and the host no longer share a cache.
+    #
+    # CoreDNS reads this when it starts: on a cluster that is already running,
+    # restart it after the change lands (kubectl -n kube-system rollout restart
+    # deploy/coredns).
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "ResolverConfig"
+      hostDNS = {
+        forwardKubeDNSToHost = false
+      }
+    }),
+
+    # AWS node names are the instance's private DNS name, which is what the
+    # cloud controller manager looks nodes up by.
+    yamlencode({
+      apiVersion       = "v1alpha1"
+      kind             = "KubeNodeConfig"
+      registerWithFQDN = true
+    }),
+  ])
 
   # kube-apiserver and kube-controller-manager only ever run on a control plane
   # node, so this is not in cluster_patch: on a worker it would be inert
   # configuration spending user data that worker has a fixed 16 KB of.
-  control_plane_patch = {
-    cluster = {
-      apiServer = {
-        extraArgs = {
-          cloud-provider = "external"
-
-          # IRSA, which is how everything in the cluster that talks to AWS
-          # authenticates: the cloud controller manager, the EBS CSI driver
-          # and Karpenter all trade a projected service account token for
-          # role credentials rather than holding a key pair.
-          #
-          # AWS can only verify those tokens if it can fetch the issuer's
-          # discovery document and public keys, so the issuer is an S3 URL
-          # rather than the in-cluster default. `jwks_uri` is not set
-          # alongside it: Kubernetes derives it as <issuer>/openid/v1/jwks,
-          # and the bootstrap module publishes the documents at exactly the
-          # paths the API server's own discovery document names.
-          #
-          # api-audiences keeps the issuer as an accepted audience, which is
-          # what it defaults to when unset, so ordinary in-cluster tokens are
-          # unaffected; sts.amazonaws.com is the audience AWS requires.
-          service-account-issuer = var.service_account_issuer
-          api-audiences          = "${var.service_account_issuer},sts.amazonaws.com"
-        }
+  control_plane_patch = join("\n---\n", [
+    # Cilium replaces kube-proxy. The generator only writes this document for
+    # control plane machines, and refuses it on a worker.
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "KubeProxyConfig"
+      enabled    = false
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "KubeAPIServerConfig"
+      extraArgs = {
+        # IRSA, which is how everything in the cluster that talks to AWS
+        # authenticates: the cloud controller manager, the EBS CSI driver
+        # and Karpenter all trade a projected service account token for
+        # role credentials rather than holding a key pair.
+        #
+        # AWS can only verify those tokens if it can fetch the issuer's
+        # discovery document and public keys, so the issuer is an S3 URL
+        # rather than the in-cluster default. `jwks_uri` is not set here:
+        # the API server advertises its own node address for it, not one
+        # derived from the issuer, so the bootstrap module rewrites it to the
+        # bucket when it copies the discovery document out (modules/bootstrap/
+        # oidc), at exactly the path it publishes the keys to.
+        #
+        # Talos prepends a service-account-issuer given here to the one it
+        # derives from the cluster endpoint, so the S3 URL is what new tokens
+        # are signed with and the endpoint URL stays an accepted issuer.
+        #
+        # api-audiences keeps the issuer as an accepted audience, which is
+        # what it defaults to when unset, so ordinary in-cluster tokens are
+        # unaffected; sts.amazonaws.com is the audience AWS requires.
+        service-account-issuer = var.service_account_issuer
+        api-audiences          = "${var.service_account_issuer},sts.amazonaws.com"
       }
-      controllerManager = {
-        extraArgs = {
-          cloud-provider = "external"
-        }
-      }
-    }
-  }
+    }),
+  ])
 
   # Karpenter refuses to schedule onto a node it launched until its
   # registration controller has synced the NodeClaim's labels onto the Node,
@@ -128,12 +196,10 @@ locals {
   # a Talos AMI is `amiFamily: Custom`, so the machine config has to carry it.
   # The taint is removed by Karpenter once the node is registered.
   karpenter_taint_patch = {
-    machine = {
-      kubelet = {
-        extraArgs = {
-          "register-with-taints" = "karpenter.sh/unregistered:NoExecute"
-        }
-      }
+    apiVersion = "v1alpha1"
+    kind       = "KubeletConfig"
+    extraArgs = {
+      "register-with-taints" = "karpenter.sh/unregistered:NoExecute"
     }
   }
 
@@ -147,112 +213,105 @@ locals {
   # and a pod holding it can read the machine config - certificate keys and
   # all - and replace it. docs/hardening.md sets out the trade.
   #
-  # The generated config does not carry machine.features.kubernetesTalosAPIAccess
-  # at all, so this creates the whole subtree and rule 2 above does not bite:
-  # there is no generated list for allowedRoles to append to. Costs 187 bytes.
+  # The generated config does not carry a KubeTalosAPIAccessConfig at all, so
+  # this adds the document and rule 2 above does not bite: there is no
+  # generated list for allowedRoles to append to.
   kubernetes_talos_api_access_patch = {
-    machine = {
-      features = {
-        kubernetesTalosAPIAccess = {
-          enabled                     = true
-          allowedRoles                = var.kubernetes_talos_api_access.roles
-          allowedKubernetesNamespaces = var.kubernetes_talos_api_access.namespaces
-        }
-      }
-    }
+    apiVersion                  = "v1alpha1"
+    kind                        = "KubeTalosAPIAccessConfig"
+    allowedRoles                = var.kubernetes_talos_api_access.roles
+    allowedKubernetesNamespaces = var.kubernetes_talos_api_access.namespaces
   }
 
-  # `talosctl gen config` writes a PodSecurity entry into
-  # cluster.apiServer.admissionControl, and that field is a list, so rule 2
-  # above applies: setting it directly would leave the config carrying two
-  # PodSecurity plugin configurations. This patch clears the generated one so
-  # that hardening_control_plane_patch, applied immediately after it, is the
-  # only one left.
+  # `talosctl gen config` writes a PodSecurity KubeAdmissionControlConfig, and
+  # a merge appends to the lists inside its configuration rather than replacing
+  # them, so setting it directly would leave kube-system in the exemptions
+  # twice, and any exemption this module no longer wants still there. This
+  # patch removes the generated document so that hardening_control_plane_patch,
+  # applied immediately after it, is the only one left.
   hardening_reset_patch = {
-    cluster = {
-      apiServer = {
-        admissionControl = {
-          "$patch" = "delete"
-        }
-      }
-    }
+    apiVersion = "v1alpha1"
+    kind       = "KubeAdmissionControlConfig"
+    name       = "PodSecurity"
+    "$patch"   = "delete"
   }
 
-  hardening_control_plane_patch = {
-    cluster = {
-      apiServer = {
-        admissionControl = [
-          {
-            name = "PodSecurity"
-            configuration = {
-              apiVersion = "pod-security.admission.config.k8s.io/v1alpha1"
-              kind       = "PodSecurityConfiguration"
-              defaults = {
-                enforce         = var.hardening.pod_security_enforce
-                enforce-version = "latest"
-                audit           = "restricted"
-                audit-version   = "latest"
-                warn            = "restricted"
-                warn-version    = "latest"
-              }
-              exemptions = {
-                usernames      = []
-                runtimeClasses = []
-                namespaces     = var.hardening.pod_security_exempt_namespaces
-              }
-            }
-          }
-        ]
-
-        # Talos already sets audit-log-path, -maxage 30, -maxbackup 10 and
-        # -maxsize 100 on kube-apiserver; what it does not set is a policy
-        # worth reading, defaulting to a single `level: Metadata` catch-all.
-        # This keeps that as the floor, drops the highest-volume reads, and
-        # raises writes that change authorization to full bodies. Secrets stay
-        # at Metadata on purpose: RequestResponse on them would copy secret
-        # values into the audit log. auditPolicy is one of the three fields
-        # that replaces rather than appends, so this needs no reset patch.
-        auditPolicy = {
-          apiVersion = "audit.k8s.io/v1"
-          kind       = "Policy"
-          omitStages = ["RequestReceived"]
-          rules = [
-            {
-              level = "None"
-              verbs = ["get", "list", "watch"]
-              resources = [{
-                group     = ""
-                resources = ["events"]
-              }]
-            },
-            {
-              level = "Metadata"
-              resources = [{
-                group     = ""
-                resources = ["secrets", "configmaps"]
-              }]
-            },
-            {
-              level = "RequestResponse"
-              resources = [{
-                group     = "rbac.authorization.k8s.io"
-                resources = ["*"]
-              }]
-            },
-            {
-              level = "RequestResponse"
-              verbs = ["create", "update", "patch", "delete"]
-              resources = [{
-                group     = ""
-                resources = ["pods", "namespaces", "nodes", "serviceaccounts"]
-              }]
-            },
-            {
-              level = "Metadata"
-            },
-          ]
+  hardening_control_plane_patch = join("\n---\n", [
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "KubeAdmissionControlConfig"
+      name       = "PodSecurity"
+      configuration = {
+        apiVersion = "pod-security.admission.config.k8s.io/v1alpha1"
+        kind       = "PodSecurityConfiguration"
+        defaults = {
+          enforce         = var.hardening.pod_security_enforce
+          enforce-version = "latest"
+          audit           = "restricted"
+          audit-version   = "latest"
+          warn            = "restricted"
+          warn-version    = "latest"
+        }
+        exemptions = {
+          usernames      = []
+          runtimeClasses = []
+          namespaces     = var.hardening.pod_security_exempt_namespaces
         }
       }
+    }),
+    yamlencode(local.hardening_audit_policy_patch),
+  ])
+
+  # Talos already sets audit-log-path, -maxage 30, -maxbackup 10 and
+  # -maxsize 100 on kube-apiserver; what it does not set is a policy worth
+  # reading, defaulting to a single `level: Metadata` catch-all. This keeps
+  # that as the floor, drops the highest-volume reads, and raises writes that
+  # change authorization to full bodies. Secrets stay at Metadata on purpose:
+  # RequestResponse on them would copy secret values into the audit log.
+  # KubeAuditPolicyConfig.configuration replaces rather than merges, so this
+  # needs no reset patch.
+  hardening_audit_policy_patch = {
+    apiVersion = "v1alpha1"
+    kind       = "KubeAuditPolicyConfig"
+    configuration = {
+      apiVersion = "audit.k8s.io/v1"
+      kind       = "Policy"
+      omitStages = ["RequestReceived"]
+      rules = [
+        {
+          level = "None"
+          verbs = ["get", "list", "watch"]
+          resources = [{
+            group     = ""
+            resources = ["events"]
+          }]
+        },
+        {
+          level = "Metadata"
+          resources = [{
+            group     = ""
+            resources = ["secrets", "configmaps"]
+          }]
+        },
+        {
+          level = "RequestResponse"
+          resources = [{
+            group     = "rbac.authorization.k8s.io"
+            resources = ["*"]
+          }]
+        },
+        {
+          level = "RequestResponse"
+          verbs = ["create", "update", "patch", "delete"]
+          resources = [{
+            group     = ""
+            resources = ["pods", "namespaces", "nodes", "serviceaccounts"]
+          }]
+        },
+        {
+          level = "Metadata"
+        },
+      ]
     }
   }
 
@@ -273,35 +332,32 @@ locals {
   # API server verify what it is given - each is pointless without the other,
   # so they are set together.
   #
-  # Both depend on something outside this repository. kube-controller-manager
-  # will not auto-approve kubernetes.io/kubelet-serving CSRs, by design: it
+  # Both depend on a component that is not part of the machine config.
+  # kube-controller-manager will not auto-approve kubernetes.io/kubelet-serving CSRs, by design: it
   # cannot tell whether the SANs a node asks for are really that node's. Until
   # an approver is running in the cluster the CSRs stay pending, and a kubelet
   # with no serving certificate still registers its node and still runs pods -
   # what breaks is anything the API server opens a connection *to* the kubelet
   # for, so `kubectl logs`, `exec`, `port-forward` and metrics-server. The
-  # approver is a Flux dependency, named in docs/hardening.md.
+  # approver is installed by the bootstrap module when this is on, and named in
+  # docs/hardening.md.
   hardening_kubelet_serving_patch = {
-    machine = {
-      kubelet = {
-        extraConfig = {
-          serverTLSBootstrap = true
-        }
-      }
+    apiVersion = "v1alpha1"
+    kind       = "KubeletConfig"
+    config = {
+      serverTLSBootstrap = true
     }
   }
 
   # Merges into the extraArgs set by control_plane_patch: maps merge key by
-  # key, so this adds a flag rather than replacing cloud-provider. The path is
+  # key, so this adds a flag rather than replacing the IRSA ones. The path is
   # the API server static pod's own copy of the cluster CA, which Talos already
   # mounts and passes as client-ca-file.
   hardening_kubelet_serving_control_plane_patch = {
-    cluster = {
-      apiServer = {
-        extraArgs = {
-          kubelet-certificate-authority = "/system/secrets/kubernetes/kube-apiserver/ca.crt"
-        }
-      }
+    apiVersion = "v1alpha1"
+    kind       = "KubeAPIServerConfig"
+    extraArgs = {
+      kubelet-certificate-authority = "/system/secrets/kubernetes/kube-apiserver/ca.crt"
     }
   }
 
@@ -314,7 +370,7 @@ locals {
   # list it clears.
   hardening_control_plane_patches = var.hardening.enabled ? [
     yamlencode(local.hardening_reset_patch),
-    yamlencode(local.hardening_control_plane_patch),
+    local.hardening_control_plane_patch,
   ] : []
 
   # Applied to every role, control plane included: the control plane nodes run
@@ -328,15 +384,15 @@ locals {
     yamlencode(local.hardening_kubelet_serving_control_plane_patch),
   ] : []
 
-  # Every role. An upgrade controller that can reach the control plane but not
-  # the workers can only do half the fleet, and the half it cannot do fails
-  # rather than being skipped.
+  # Control plane only: Talos refuses this on a worker, both as a document and
+  # as the v1alpha1 feature flag it replaces, and fails the node's config
+  # validation rather than ignoring it.
   kubernetes_talos_api_access_patches = var.kubernetes_talos_api_access.enabled ? [
     yamlencode(local.kubernetes_talos_api_access_patch),
   ] : []
 
   control_plane_patches = concat(
-    [yamlencode(local.cluster_patch), yamlencode(local.control_plane_patch)],
+    [local.cluster_patch, local.control_plane_patch],
     local.hardening_control_plane_patches,
     local.kubelet_serving_patches,
     local.kubelet_serving_control_plane_patches,
@@ -344,9 +400,8 @@ locals {
   )
 
   worker_patches = concat(
-    [yamlencode(local.cluster_patch)],
+    [local.cluster_patch],
     local.kubelet_serving_patches,
-    local.kubernetes_talos_api_access_patches,
   )
 
   karpenter_worker_patches = concat(

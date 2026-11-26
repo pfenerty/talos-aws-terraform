@@ -39,6 +39,22 @@ Two consequences:
 * `cilium_bootstrap_version` only affects new clusters. Upgrading Cilium on
   a running cluster is Flux's job.
 
+## Kubelet CSR approver ownership
+
+When `kubelet_csr_approver_enabled` is set - the root module ties it to
+`hardening.kubelet_serving_certificates` - the `csr-approver` submodule installs
+`kubelet-csr-approver` after Cilium. It follows the same model as Cilium: a
+release named `kube-system-kubelet-csr-approver` in `kube-system`, created once
+with `lifecycle { ignore_changes = all }`, which a Flux `HelmRelease` of the
+same name and namespace can adopt. `kubelet_csr_approver_version` only affects
+new clusters.
+
+The cluster health check waits for it. With `serverTLSBootstrap` on, a control
+plane kubelet has no certificate to answer on port 10250 until one is approved,
+and Talos reads the static pod status from that port, so the cluster does not
+report healthy until the approver has approved the control plane's request. See
+docs/hardening.md for what it accepts and why.
+
 ## Flux bootstrap repository contract
 
 This module is written against

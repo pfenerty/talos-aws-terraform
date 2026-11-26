@@ -53,6 +53,11 @@ module "bootstrap" {
   hubble_ca_validity_hours = var.hubble_ca_validity_hours
   cluster_health_timeout   = var.cluster_health_timeout
 
+  # Tied to the machine config setting that needs it, so that one cannot be on
+  # without the other.
+  kubelet_csr_approver_enabled = var.hardening.kubelet_serving_certificates
+  kubelet_csr_approver_version = var.kubelet_csr_approver_version
+
   # Data flow already orders this after the cluster's outputs, but not after
   # the machine config applies, which produce none. The health gate is the
   # thing that decides the apply succeeded, so it has to run after the last

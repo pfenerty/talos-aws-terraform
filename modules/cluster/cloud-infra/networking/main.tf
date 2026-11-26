@@ -25,6 +25,18 @@ resource "aws_vpc" "this" {
   })
 
   cidr_block = var.vpc_cidr
+
+  # Both on, and both stated, because the second is not the default for a VPC
+  # created here and its absence is easy to miss. With DNS hostnames off the
+  # Amazon DNS server does not resolve instances' private names, so
+  # ip-172-31-2-183.us-east-2.compute.internal - the name every node registers
+  # under - resolves to nothing. That is invisible until something looks a node
+  # up by name, and the kubelet serving certificate approver does exactly that:
+  # it denies any request whose name it cannot resolve to the requesting
+  # address. Enabling it also gives instances with a public IP a public DNS
+  # name, which costs nothing and exposes nothing the IP does not.
+  enable_dns_support   = true
+  enable_dns_hostnames = true
 }
 
 resource "aws_subnet" "this" {

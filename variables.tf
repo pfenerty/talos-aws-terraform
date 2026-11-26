@@ -183,13 +183,20 @@ variable "hardening" {
     kubelet_serving_certificates   = optional(bool, false)
   })
   default     = {}
-  description = "Machine config hardening, off by default because it changes what the cluster will admit. `enabled` turns on a real API server audit policy and Pod Security Admission enforcing the standard named below. It is the machine config half of a hardening baseline and not the whole of one: docs/hardening.md sets out what it covers, what Talos already does without it, and what has to be enforced in the Flux repository or the AWS layer instead. `kubelet_serving_certificates` makes the kubelet bootstrap a CA-signed serving certificate rather than self-signing one, and requires a CSR approver running in the cluster - a Flux dependency this module cannot install, and without which `kubectl logs` and `exec` stop working."
+  description = "Machine config hardening, off by default because it changes what the cluster will admit. `enabled` turns on a real API server audit policy and Pod Security Admission enforcing the standard named below. It is the machine config half of a hardening baseline and not the whole of one: docs/hardening.md sets out what it covers, what Talos already does without it, and what has to be enforced in the Flux repository or the AWS layer instead. `kubelet_serving_certificates` makes the kubelet bootstrap a CA-signed serving certificate rather than self-signing one, and the API server verify it. That needs a CSR approver in the cluster, because kube-controller-manager will not approve kubelet serving requests itself, so turning it on also installs kubelet-csr-approver during bootstrap, and Flux can adopt the release afterwards."
 }
 
 variable "config_output_path" {
   type        = string
   default     = null
   description = "Directory to write the generated kubeconfig, talosconfig and machine config files into. Null, the default, writes nothing: the same files are available as outputs, and a module that writes into the caller's directory collides with itself when instantiated more than once. The files carry cluster credentials and are written mode 0600."
+}
+
+# renovate: datasource=helm depName=kubelet-csr-approver registryUrl=https://postfinance.github.io/kubelet-csr-approver
+variable "kubelet_csr_approver_version" {
+  type        = string
+  default     = "1.2.16"
+  description = "kubelet-csr-approver chart version installed when hardening.kubelet_serving_certificates is on. Changing it affects new clusters only: the bootstrap module deliberately stops reconciling the release after creating it, so Flux can adopt it."
 }
 
 # renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io

@@ -2,8 +2,9 @@
 
 What the `hardening` variable does, what Talos already does without it, and
 what cannot be done from a machine config at all. Everything here was checked
-against Talos machinery 1.13 - the version `terraform-provider-talos` 0.11.0
-vendors - and against machine configs rendered by this module.
+against Talos machinery 1.14 - the version `terraform-provider-talos` 0.12
+vendors - and against machine configs rendered by this module and validated
+with `talosctl validate --mode cloud`.
 
 ## Scope, and the thing to be honest about first
 
@@ -143,7 +144,7 @@ another 150 bytes on the control plane and 58 on each worker.
 
 | Item | Why not |
 |---|---|
-| Enabling `kubelet_serving_certificates` by default | It depends on a CSR approver that has to be deployed by Flux, and turning it on without one breaks `kubectl logs` and `exec`. It is opt-in for that reason, not because the setting is wrong. |
+| Enabling `kubelet_serving_certificates` by default | It brings a CSR approver with it, installed during bootstrap, which is one more component with the power to get certificates signed, and on a running cluster there is a short window where `kubectl logs` and `exec` fail while the approver lands. It is opt-in for that reason, not because the setting is wrong. |
 | Node disk encryption | The root EBS volume is already encrypted by the launch template. Talos can do LUKS2 on `EPHEMERAL`/`STATE` via `VolumeConfig`, but every key kind is awkward here: a `static` passphrase would sit in the machine config, `tpm` needs a TPM the instance types used here do not present, and `nodeID` ties the volume to the node. |
 | FIPS 140-3 | An image choice, not a config field. It needs an Image Factory schematic and a different AMI; `modules/cluster/cloud-infra/compute` pins the stock Sidero AMI by owner and name. |
 | Shipping the audit log off the node | `machine.logging.destinations` carries Talos service logs only, as `json_lines` over TCP or UDP. The kube-apiserver audit log is a file on the control plane node and needs a collector running in the cluster. |
@@ -166,7 +167,7 @@ procedure as written - those are called out.
 ### Covered here, by Talos defaults
 
 No configuration in this repository is required for these. They are how Talos
-generates and runs the cluster, verified against machinery 1.13 and against
+generates and runs the cluster, verified against machinery 1.14 and against
 configs rendered by this module.
 
 | Rule | Control | How |
@@ -200,9 +201,9 @@ configs rendered by this module.
 |---|---|---|
 | V-242403 | Audit records must identify event type, source, result, user and container | the audit policy this variable installs. Talos's default `level: Metadata` catch-all does not carry enough to satisfy this |
 | V-242437 | Pod security policy set | PSA replaces PSP. `hardening` sets the cluster-wide default; per-namespace labels are Flux's half, below |
-| V-254800 | Pod Security Admission control file configured | `cluster.apiServer.admissionControl`. Talos configures one by default at `baseline`; `hardening` raises it to `restricted` |
+| V-254800 | Pod Security Admission control file configured | a `KubeAdmissionControlConfig` named `PodSecurity`. Talos configures one by default at `baseline`; `hardening` raises it to `restricted` |
 | V-254801 | PodSecurity admission controller enabled | same file, applied to every namespace outside the exemption list |
-| V-242424, V-242425 | Kubelet `tlsPrivateKeyFile` and `tlsCertFile` | `kubelet_serving_certificates`. **Deviation in the check, not the control.** The kubelet bootstraps a CA-signed certificate and rotates it, and the API server verifies it. The config fields the check reads stay empty, because the certificate is issued and renewed rather than placed - it lives at `/var/lib/kubelet/pki/kubelet-server-current.pem`. Setting the fields literally would mean baking a certificate and private key into user data that every node in the autoscaling group shares, with SANs for addresses that do not exist at render time. Rotation is the compensating control. **Requires the Flux dependency below.** |
+| V-242424, V-242425 | Kubelet `tlsPrivateKeyFile` and `tlsCertFile` | `kubelet_serving_certificates`. **Deviation in the check, not the control.** The kubelet bootstraps a CA-signed certificate and rotates it, and the API server verifies it. The config fields the check reads stay empty, because the certificate is issued and renewed rather than placed - it lives at `/var/lib/kubelet/pki/kubelet-server-current.pem`. Setting the fields literally would mean baking a certificate and private key into user data that every node in the autoscaling group shares, with SANs for addresses that do not exist at render time. Rotation is the compensating control. **Installs the CSR approver described below.** |
 
 ### Belongs in the Flux bootstrap repository
 
@@ -228,30 +229,71 @@ description of what it does.
 
 **Named dependency: a kubelet-serving CSR approver.** This one is not a rule of
 its own - it is what V-242424 and V-242425 above depend on, and the reason
-`kubelet_serving_certificates` is opt-in. kube-controller-manager refuses to
-auto-approve `kubernetes.io/kubelet-serving` CSRs by design: it cannot verify
-that the SANs a node requests belong to that node. Something has to make that
-judgement, and in practice that is
-[`kubelet-csr-approver`](https://github.com/postfinance/kubelet-csr-approver)
-as a HelmRelease.
+`kubelet_serving_certificates` brings a component with it.
+kube-controller-manager refuses to auto-approve `kubernetes.io/kubelet-serving`
+CSRs by design: it cannot verify that the SANs a node requests belong to that
+node. Something has to make that judgement, and in practice that is
+[`kubelet-csr-approver`](https://github.com/postfinance/kubelet-csr-approver).
 
-Two things about configuring it here. Nodes register with their FQDN, so names
-look like `ip-172-31-4-17.eu-west-2.compute.internal` and the provider regex
-has to match that shape. And the approver confirms the name resolves to the
-requesting address: the VPC sets neither DNS attribute explicitly
-(`modules/cluster/cloud-infra/networking/main.tf`), so `enable_dns_support`
-is on by default and private internal names resolve, while
-`enable_dns_hostnames` stays off and governs public hostnames only. If that
-turns out not to hold, the approver has `bypassDnsResolution` with a tighter
-regex as the fallback.
+The bootstrap module installs it whenever `kubelet_serving_certificates` is on
+(`modules/bootstrap/csr-approver`), so the setting cannot be on without it and
+it works with Flux disabled. It is created the way Cilium is: a Helm release
+Terraform creates and then leaves alone (`ignore_changes = all`), named
+`kube-system-kubelet-csr-approver` in `kube-system`, which a Flux `HelmRelease`
+of the same name and namespace can adopt. Adopting it is owed to the Flux
+repository; until then it simply keeps running as installed.
 
-Order of operations: install the approver first. With
-`kubelet_serving_certificates` on and no approver, CSRs sit pending - nodes
-still register and still run pods, because that path uses the client
-certificate, but `kubectl logs`, `exec`, `port-forward` and metrics-server
-fail until the CSRs are approved. On a new cluster that window is harmless,
-since bootstrap does not need kubelet serving certificates; on a running one
-it is a visible outage of exactly those operations.
+What the install configures, because this is the part that decides what gets a
+certificate signed:
+
+* **`providerRegex`**: nodes register with their FQDN, so names look like
+  `ip-172-31-4-17.eu-west-2.compute.internal`. The regex is built from the
+  region (`ec2.internal` in `us-east-1`, `<region>.compute.internal`
+  elsewhere) and matches that shape and nothing broader.
+* **`providerIpPrefixes`**: the VPC CIDR. A request carrying an address outside
+  it is refused.
+* **DNS resolution is left on.** The approver confirms the name resolves to the
+  requesting address, which is what stops a node getting a certificate for an
+  address that is not its own. That needs the VPC to have `enable_dns_hostnames`
+  on: with it off the Amazon DNS server does not resolve instances' private
+  names at all, and every request is denied as unresolvable. An earlier version
+  of this document said the opposite - that the attribute only governed public
+  hostnames - and the first cluster built on it had every request denied. The
+  networking module now sets both DNS attributes explicitly. `bypassDnsResolution`
+  with the tight regex above is the fallback if resolution has to be turned off,
+  at the cost of that check.
+* **CoreDNS does not forward through the host DNS cache.** The machine config
+  sets `ResolverConfig.hostDNS.forwardKubeDNSToHost: false`. With it on, a
+  lookup of a node's own name from CoreDNS is answered by Talos's host DNS on
+  the node CoreDNS runs on, with every address that node has: its VPC address,
+  its public IP and its pod-network address, where the VPC resolver returns the
+  VPC address alone. The approver requires every address the name resolves to
+  to be inside the VPC, so it denied that node's requests, and only that node's:
+  the other nodes' names were not local to CoreDNS and resolved normally. With
+  the control plane the affected node, its kubelet never got a certificate and
+  Talos could not read the static pod status. Found on the third cluster, after
+  the VPC DNS change had fixed the first failure (`could not be resolved`). The
+  cost of turning forwarding off is that CoreDNS and the host no longer share a
+  cache. On a cluster already running, restart CoreDNS after the change lands:
+  it reads its upstream when it starts.
+* **Denials say why.** The approver writes its reason into the CSR:
+  `kubectl get csr <name> -o jsonpath='{.status.conditions[*].message}'`.
+* **Tolerations** for the control plane taint and for
+  `node.cloudprovider.kubernetes.io/uninitialized`. Nodes carry the latter until
+  the cloud controller manager initialises them, and the cloud controller
+  manager is installed by Flux, so an approver without it would never schedule.
+
+Order of operations: on a new cluster the approver is installed after Cilium,
+and the cluster health check waits for it. That is not optional: with
+`serverTLSBootstrap` on, a kubelet has no certificate to answer on port 10250
+until one is approved, and on control plane nodes Talos reads the static pod
+status from that port, so a cluster whose requests are being denied reports its
+control plane static pods as missing even though they are running. On a running
+cluster the machine config applies first, so the
+kubelets restart and ask for serving certificates before the approver exists:
+`kubectl logs`, `exec`, `port-forward` and metrics-server fail until it is
+installed and has approved each node's request. That window is short and is
+the cost of turning the setting on.
 
 ### Not applicable as written
 
@@ -315,7 +357,8 @@ The consequence for this rule family is twofold:
 2. **Several of the files do not exist.** `kubeadm.conf` has no analogue -
    Talos does not use kubeadm and never writes that file. The kube-proxy
    kubeconfig is absent because this cluster runs no kube-proxy at all
-   (`cluster.proxy.disabled`, with Cilium providing the replacement). The
+   (`KubeProxyConfig` with `enabled: false`, and Cilium providing the
+   replacement). The
    administrative kubeconfig is not stored on any node: it is generated on
    demand through the Talos API.
 
@@ -395,8 +438,8 @@ the 22 rules above, and an assessor is entitled to ask about both:
 
 ### A third, if `kubernetes_talos_api_access` is enabled
 
-`kubernetes_talos_api_access` sets `machine.features.kubernetesTalosAPIAccess`,
-which lets Talos issue a Talos API client certificate to a service account in
+`kubernetes_talos_api_access` adds a `KubeTalosAPIAccessConfig` document to
+the control plane config, which lets Talos issue a Talos API client certificate to a service account in
 a named namespace, carrying named roles. The default shape is `os:admin` for
 `tuppr-system`, because that is what an in-cluster upgrade controller needs in
 order to call the upgrade API on each node.
@@ -446,7 +489,7 @@ Talos one, which is the good news: RBAC has the granularity Talos does not.
 #### Containing it
 
 Talos offers no granularity below the namespace - there is no service account
-or pod selector on `kubernetesTalosAPIAccess`, only `allowedRoles` and
+or pod selector on `KubeTalosAPIAccessConfig`, only `allowedRoles` and
 `allowedKubernetesNamespaces`. Three things follow, in order of how much they
 buy:
 
@@ -492,25 +535,29 @@ element of `config_patches` in order as a strategic merge against the whole
 configuration, under four rules:
 
 1. **Maps merge key by key.** Two patches both touching
-   `machine.kubelet.extraArgs` produce the union of their keys. The older
+   `KubeAPIServerConfig.extraArgs` produce the union of their keys. The older
    version of this module merged patches in HCL to avoid a clobber that
    strategic merge does not actually do.
-2. **Lists append.** Exactly three fields in v1alpha1 are tagged
-   `merge:"replace"`: `cluster.network.podSubnets`,
-   `cluster.network.serviceSubnets` and `cluster.apiServer.auditPolicy`.
-   Everything else list-valued appends to what the generator already wrote.
+2. **Lists append.** `KubeNetworkConfig.podSubnets` and `.serviceSubnets` are
+   overwritten on merge and `KubeAuditPolicyConfig.configuration` is replaced
+   whole. Everything else list-valued appends to what the generator already
+   wrote.
 3. **To replace a populated list, delete it first.** `talosctl gen config`
-   writes a `PodSecurity` entry into `cluster.apiServer.admissionControl`, so
-   setting that field appends a second one. The fix is `$patch: delete` in one
-   patch and the replacement in the next, because a single patch may not
-   modify the same document twice.
+   writes a `KubeAdmissionControlConfig` named `PodSecurity` whose exemption
+   list already holds `kube-system`, so patching it appends a second copy and
+   keeps any exemption this module no longer wants. The fix is `$patch:
+   delete` in one patch and the replacement in the next, because a single
+   patch may not modify the same document twice.
 4. **Patches may add whole documents**, matched on `apiVersion`, `kind` and
-   `name` - but only documents the provider's vendored machinery knows.
+   `name`, and may remove a generated one with `$patch: delete` - which is how
+   Flannel is turned off.
 
 Patches are also scoped by role. `kube-apiserver` and `kube-controller-manager`
 only run on control plane nodes, so their settings are not in the patch applied
 to workers, where they would be inert configuration spending a worker's share
-of a fixed 16 KB.
+of a fixed 16 KB. For `KubeProxyConfig` and `KubeTalosAPIAccessConfig` it is
+stronger than that: the generator writes neither on a worker, and Talos refuses
+both there, so a worker patch carrying them renders a config the node rejects.
 
 ### Size
 
@@ -519,13 +566,13 @@ machine config *is* the user data. As rendered today:
 
 | Config | Bytes | Headroom |
 |---|---|---|
-| Control plane, `hardening` off | 11336 | 5048 |
-| Control plane, `hardening` on | 12463 | 3921 |
-| Control plane, plus `kubelet_serving_certificates` | 12613 | 3771 |
-| Worker | 2958 | 13426 |
-| Worker, plus `kubelet_serving_certificates` | 3016 | 13368 |
-| Karpenter worker | 3028 | 13356 |
-| Karpenter worker, plus `kubelet_serving_certificates` | 3086 | 13298 |
+| Control plane, `hardening` off | 11728 | 4656 |
+| Control plane, `hardening` on | 12575 | 3809 |
+| Control plane, plus `kubelet_serving_certificates` | 12685 | 3699 |
+| Worker | 3138 | 13246 |
+| Worker, plus `kubelet_serving_certificates` | 3164 | 13220 |
+| Karpenter worker | 3200 | 13184 |
+| Karpenter worker, plus `kubelet_serving_certificates` | 3226 | 13158 |
 
 Each `talos_machine_configuration` data source carries a postcondition
 asserting the result fits. That is not decoration: exceeding the limit
@@ -534,43 +581,63 @@ data, and Karpenter nodes would fail to launch at all rather than fail a plan.
 
 ## Version skew
 
-`terraform-provider-talos` 0.11.0 vendors Talos machinery **1.13.0**, and that
-is what generates the configuration and applies these patches - regardless of
-what `talos_version` says the nodes will run (currently 1.14.1).
+`terraform-provider-talos` vendors a Talos machinery, and that machinery - not
+`talos_version` alone - decides what the generated configuration looks like.
+From 0.12, which vendors **1.14**, a 1.14 `talos_version` generates the new
+configuration documents, and Talos 1.14 refuses a configuration that sets the
+same thing in both a document and the deprecated v1alpha1 field it replaces.
+Earlier providers (0.11 vendored 1.13) generate v1alpha1 only and reject
+document kinds they do not know, so the two cannot share a set of patches. This
+module patches the documents, and `versions.tf` requires provider 0.12 or later.
 
-Talos 1.14 moves nearly every setting used here into dedicated configuration
-documents and deprecates the v1alpha1 fields. Those documents are not usable
-from this module yet: machinery 1.13 rejects document kinds it does not know.
-The deprecated fields still work in 1.14, so nothing is broken; the migration
-is simply not available. When the provider bumps its machinery:
+The failure mode is worth knowing, because nothing in `terraform plan` or
+`apply` shows it. The `talos_machine_configuration` data source renders the
+conflicting config without complaint, EC2 accepts it as user data, and the node
+rejects it at boot:
 
-| v1alpha1 field used here | 1.14 document |
+```
+[talos] controller failed {"component": "controller-runtime", "controller":
+"config.AcquireController", "error": "failed to validate config acquired via
+platform aws: ... UnattendedInstallConfig config is incompatible with v1alpha1
+config (.machine.install) ...
+```
+
+The node never gets its config, so it never joins - the first symptom is a
+cluster that does not come up. Validating the rendered files catches it before
+they are deployed: set `config_output_path` and run
+
+```
+talosctl validate --mode cloud --config <config_output_path>/control-plane.yaml
+```
+
+for each of `control-plane.yaml`, `worker.yaml` and `karpenter-worker.yaml`.
+
+| v1alpha1 field it replaces | Document patched here |
 |---|---|
+| `machine.install` | `UnattendedInstallConfig` |
+| `machine.kubelet.extraArgs`, `.extraConfig` | `KubeletConfig` |
+| `machine.kubelet.registerWithFQDN` | `KubeNodeConfig` |
+| `machine.features.kubernetesTalosAPIAccess` | `KubeTalosAPIAccessConfig` |
+| `cluster.network.podSubnets` | `KubeNetworkConfig` |
+| `cluster.network.cni` | `KubeFlannelCNIConfig`, deleted |
+| `cluster.proxy` | `KubeProxyConfig` |
 | `cluster.apiServer.extraArgs` | `KubeAPIServerConfig` |
 | `cluster.apiServer.admissionControl` | `KubeAdmissionControlConfig` |
 | `cluster.apiServer.auditPolicy` | `KubeAuditPolicyConfig` |
 | `cluster.controllerManager.extraArgs` | `KubeControllerManagerConfig` |
-| `cluster.network.podSubnets` | `KubeNetworkConfig` |
-| `cluster.proxy` | `KubeProxyConfig` |
-| `machine.kubelet.extraArgs` | `KubeletConfig` |
-| `machine.kubelet.registerWithFQDN` | `KubeNodeConfig` |
 
-Migrating is not a like-for-like rename. `KubeNetworkConfig.podSubnets`
-overwrites on merge where the v1alpha1 field is one of the three tagged
-`merge:"replace"`, and `KubeAuditPolicyConfig.configuration` replaces rather
-than merges, so the delete-then-set idiom above stops being necessary for
-admission control only if `KubeAdmissionControlConfig` is unnamed and
-singular. Re-derive the merge behaviour from the reference at that point
-rather than assuming these patches port unchanged.
+`cluster.externalCloudProvider` has no document yet and is still patched into
+v1alpha1.
 
-One observable consequence of the skew showed up in `machine.install.image`:
-the generated config pinned `ghcr.io/siderolabs/installer:v1.13.0`, the
-machinery's own version, even though `talos_version` is `v1.14.1` and the AMI
-is 1.14.1. Inert while nodes only ever boot from the AMI, and the wrong
-installer the moment anything upgrades one in place - which is exactly what an
-in-place Talos upgrade does. `cluster_patch` now overrides it with
-`var.talos_version`, at no cost against the 16 KB ceiling: the two strings are
-the same length.
+The skew did show up once before, in the installer image: the generated config
+pins a `factory.talos.dev` installer at the machinery's own version (1.14.0 as
+of provider 0.12), even though `talos_version` is `v1.14.1` and the AMI is
+1.14.1. Inert while nodes only ever boot from the AMI, and the wrong installer
+the moment anything upgrades one in place - which is exactly what an in-place
+Talos upgrade does. `cluster_patch` overrides it with `var.talos_version`.
+Another quirk of the same document: a patch that leaves out
+`provisioning.diskSelector` drops the generated one on merge and renders an
+invalid config, so the selector is restated.
 
 ## How a machine config change reaches running nodes
 
