@@ -30,7 +30,7 @@ as those are.
 
 ## Conventions
 
-* Directories are kebab-case (`cloud-infra`, `flux-bootstrap`); outputs live in
+* Directories are kebab-case (`cloud-infra`, `csr-approver`); outputs live in
   `outputs.tf`, and provider requirements in `versions.tf`.
 * No module declares a `provider` block. Provider *requirements* go in every
   module that uses one; provider *configuration* belongs to the caller, and

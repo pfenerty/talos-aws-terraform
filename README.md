@@ -32,7 +32,7 @@ module "talos_cluster" {
   post_install = {
     flux = {
       enabled    = true
-      git_url    = "ssh://git@github.com/you/flux-bootstrap.git"
+      git_url    = "ssh://git@github.com/you/talos-aws-gitops.git"
       git_branch = "main"
       ssh_key    = file("~/.ssh/flux")
     }
@@ -376,11 +376,12 @@ machine config needs no escaping.
 ## Flux bootstrap repository
 
 The post-install extras are written against
-[pfenerty/flux-bootstrap](https://github.com/pfenerty/flux-bootstrap) and
-publish what it reads - the `cilium-config` and `karpenter-config` secrets,
-the `cloud-controller-manager-aws-config`, `ebs-csi-driver-aws-config`,
-`karpenter-aws-config` and `cluster-versions` ConfigMaps, and
-`aws-loadbalancer-config`. Using them with a different GitOps repository means
+[pfenerty/talos-aws-gitops](https://github.com/pfenerty/talos-aws-gitops) and
+publish what it reads - the `cilium-config`, `karpenter-config` and
+`karpenter-vars` secrets, the `cloud-controller-manager-aws-config`,
+`ebs-csi-driver-aws-config`, `karpenter-aws-config` and `cluster-versions`
+ConfigMaps, and `aws-loadbalancer-config`. Fork it, or use it as the
+reference for your own. Using them with a different GitOps repository means
 matching those names and shapes; [`modules/bootstrap`](modules/bootstrap)
 documents each one.
 
@@ -435,11 +436,16 @@ Flux syncs `clusters/<project_name>`, and bootstrap writes only the
 committed to that directory in the bootstrap repository *before* the apply:
 
 ```sh
-git clone ssh://git@github.com/you/flux-bootstrap.git
-cd flux-bootstrap
-cp -r clusters/template clusters/my-cluster
+git clone ssh://git@github.com/you/talos-aws-gitops.git
+cd talos-aws-gitops
+./scripts/new-cluster.sh my-cluster
 git add clusters/my-cluster && git commit -m "Add my-cluster" && git push
 ```
+
+talos-aws-gitops's template includes tuppr, which needs
+`kubernetes_talos_api_access = { enabled = true }`. Without it, drop tuppr
+from the cluster's overlay; its README lists what each add-on needs from
+this module.
 
 Apply with the path empty and the cluster comes up with Flux installed and
 nothing else, which is a valid thing to want but rarely what was meant. The

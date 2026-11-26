@@ -58,7 +58,7 @@ docs/hardening.md for what it accepts and why.
 ## Flux bootstrap repository contract
 
 This module is written against
-[pfenerty/flux-bootstrap](https://github.com/pfenerty/flux-bootstrap) and
+[pfenerty/talos-aws-gitops](https://github.com/pfenerty/talos-aws-gitops) and
 publishes the values that repository reads:
 
 | Object | Namespace | Written when |
